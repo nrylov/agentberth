@@ -46,3 +46,7 @@ Validated on 2026-09-09 against the local Docker stack:
 - Tool integration checks passed for draft/published deletion, bundled and agent-reference protection, deleted-version visibility and reuse prevention, and preservation of accepted/historical run snapshots.
 - A sandbox test accepted immediately before deletion completed successfully afterward. No LLM calls were required.
 - The tool smoke script now deletes its generated tool versions after successful verification.
+
+## Console themes
+
+The TypeScript/Vite production build and formatting checks pass for the default dark theme and light-mode switch. Theme initialization was checked with no saved preference, both valid preferences, an invalid stored value, and unavailable browser storage. The preference initializer is served as an external same-origin asset to comply with the console CSP. Visual browser verification was not performed.

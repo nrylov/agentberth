@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import {
+  Moon,
+  Sun,
   Anchor,
   ArrowUpRight,
   Box,
@@ -87,6 +89,20 @@ const initial: Config = {
 const money = (value: number | string) => `$${Number(value).toFixed(5)}`;
 
 function App() {
+  const [theme, setTheme] = useState(() =>
+    document.documentElement.dataset.theme === "light" ? "light" : "dark",
+  );
+  function toggleTheme() {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    setTheme(next);
+    try {
+      localStorage.setItem("agentberth-theme", next);
+    } catch {
+      /* Theme still works when storage is unavailable. */
+    }
+  }
+
   const [key, setKey] = useState(
     () => sessionStorage.getItem("agentberth-key") || "agentberth-local",
   );
@@ -548,7 +564,25 @@ function App() {
                     : "Settings"}
             </strong>
           </span>
-          <span className="local-badge">LOCAL</span>
+          <div className="topbar-actions">
+            <button
+              className="theme-toggle"
+              role="switch"
+              aria-checked={theme === "dark"}
+              aria-label="Dark mode"
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Moon size={16} /> : <Sun size={16} />}
+              <span className="theme-label">
+                {theme === "dark" ? "Dark" : "Light"}
+              </span>
+              <span className="theme-track" aria-hidden="true">
+                <span className="theme-thumb" />
+              </span>
+            </button>
+            <span className="local-badge">LOCAL</span>
+          </div>
         </header>
         <div className="content">
           {view === "tools" && (

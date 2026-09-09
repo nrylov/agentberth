@@ -140,3 +140,7 @@ These tests create clearly named example agents and runs in your local database.
 ## License
 
 [Apache License 2.0](LICENSE).
+
+### Console appearance
+
+The console opens in dark mode by default. Use the sun/moon switch in the top bar to select light mode or return to dark mode. Your choice is saved in this browser and restored on reload.
