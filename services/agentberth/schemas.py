@@ -13,6 +13,9 @@ class ToolRef(BaseModel):
 
 
 class AgentConfig(BaseModel):
+    example_task: str = Field(
+        default="", max_length=8000, description="Suggested playground task; never executed automatically."
+    )
     name: str = Field(min_length=1, max_length=80)
     instructions: str = Field(min_length=1, max_length=12000)
     provider: Literal["demo", "openrouter"] = "demo"
@@ -29,6 +32,7 @@ class AgentConfig(BaseModel):
             raise ValueError("Tools must be an array of explicit version references.")
         return [reference(v) for v in values]
 
+    max_output_tokens: int = Field(default=2048, ge=256, le=16384)
     max_steps: int = Field(default=6, ge=1, le=12)
     timeout_seconds: int = Field(default=120, ge=10, le=300)
 

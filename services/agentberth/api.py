@@ -448,7 +448,7 @@ def model(run_id: str, body: ModelRequest, authorization: str = Header(default="
     payload = {
         "model": spec["model"],
         "messages": body.messages,
-        "max_tokens": 2048,
+        "max_tokens": spec.get("max_output_tokens", 2048),
         "provider": {"require_parameters": True},
     }
     tools = definitions(spec["tool_packages"])
@@ -494,6 +494,7 @@ def model(run_id: str, body: ModelRequest, authorization: str = Header(default="
                     "prompt_tokens": usage.get("prompt_tokens", 0),
                     "completion_tokens": usage.get("completion_tokens", 0),
                     "cost": usage.get("cost"),
+                    "finish_reason": data["choices"][0].get("finish_reason"),
                 },
             )
     return {"message": message}

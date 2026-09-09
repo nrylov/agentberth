@@ -32,11 +32,13 @@ import { SchedulesView, type Schedule, type Queue } from "./SchedulesView";
 import { RunFiles, encodeFiles } from "./RunFiles";
 
 type Config = {
+  example_task: string;
   name: string;
   instructions: string;
   provider: "demo" | "openrouter";
   model: string;
   tools: ToolRef[];
+  max_output_tokens?: number;
   max_steps: number;
   timeout_seconds: number;
 };
@@ -85,6 +87,7 @@ type Settings = {
 type View = "schedules" | "playground" | "runs" | "settings" | "tools";
 const terminal = new Set(["completed", "failed", "cancelled", "timed_out"]);
 const initial: Config = {
+  example_task: "",
   name: "",
   instructions:
     "Help the user. Use tools when useful. Save requested deliverables to files in the workspace.",
@@ -137,6 +140,16 @@ function App() {
   const [input, setInput] = useState(
     "Calculate the total and average of 12, 18, and 24. Save a short report to report.md.",
   );
+  const taskDrafts = useRef<Record<string, string>>({});
+  function selectAgent(next: Agent) {
+    if (next.slug === selected) return;
+    taskDrafts.current[selected] = input;
+    setSelected(next.slug);
+    setInput(taskDrafts.current[next.slug] ?? next.config.example_task ?? "");
+    setFiles([]);
+    setActive(null);
+    setEvents([]);
+  }
   const [files, setFiles] = useState<File[]>([]);
   const [active, setActive] = useState<Run | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
@@ -466,6 +479,12 @@ function App() {
           ),
         },
       );
+      if (editor.isNew) {
+        setInput(saved.config.example_task || "");
+        setFiles([]);
+        setActive(null);
+        setEvents([]);
+      }
       setSelected(saved.slug);
       setEditor(null);
       await refresh();
@@ -681,7 +700,7 @@ function App() {
                   <button
                     key={a.slug}
                     className={`agent-card ${selected === a.slug ? "active" : ""}`}
-                    onClick={() => setSelected(a.slug)}
+                    onClick={() => selectAgent(a)}
                   >
                     <span className="agent-icon">
                       <Box size={21} />
@@ -761,6 +780,15 @@ function App() {
                           </p>
                         )}
                         <label htmlFor="task">Task</label>
+                        {agent?.config.example_task && (
+                          <button
+                            className="secondary"
+                            type="button"
+                            onClick={() => setInput(agent.config.example_task)}
+                          >
+                            Use suggested task
+                          </button>
+                        )}
                         <textarea
                           id="task"
                           value={input}
@@ -1292,6 +1320,43 @@ function App() {
                     setEditor({
                       ...editor,
                       config: { ...editor.config, name: e.target.value },
+                    })
+                  }
+                />
+                <label htmlFor="max-output-tokens">
+                  Maximum output tokens per model call
+                </label>
+                <input
+                  id="max-output-tokens"
+                  type="number"
+                  min={256}
+                  max={16384}
+                  required
+                  value={editor.config.max_output_tokens ?? 2048}
+                  onChange={(e) =>
+                    setEditor({
+                      ...editor,
+                      config: {
+                        ...editor.config,
+                        max_output_tokens: Number(e.target.value),
+                      },
+                    })
+                  }
+                />
+                <label htmlFor="example-task">Suggested task</label>
+                <textarea
+                  id="example-task"
+                  rows={4}
+                  maxLength={8000}
+                  value={editor.config.example_task || ""}
+                  placeholder="An example task to load when this agent is selected"
+                  onChange={(e) =>
+                    setEditor({
+                      ...editor,
+                      config: {
+                        ...editor.config,
+                        example_task: e.target.value,
+                      },
                     })
                   }
                 />

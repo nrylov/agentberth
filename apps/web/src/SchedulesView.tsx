@@ -20,7 +20,7 @@ type Props = {
   agents: {
     slug: string;
     name: string;
-    config: { tools: { id: string; version: string }[] };
+    config: { example_task?: string; tools: { id: string; version: string }[] };
   }[];
   tools: ToolRecord[];
   runs: { id: string; agent_slug: string; status: string }[];
@@ -131,6 +131,10 @@ export function SchedulesView({
               value={slug}
               onChange={(e) => {
                 setSlug(e.target.value);
+                setInput(
+                  agents.find((a) => a.slug === e.target.value)?.config
+                    .example_task || "",
+                );
                 setDisabled([]);
                 setAdditions([]);
               }}

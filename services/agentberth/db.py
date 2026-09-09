@@ -118,6 +118,14 @@ def initialize():
             ("harbor-guide", demo["name"], Jsonb(demo)),
         )
 
+        from agentberth.examples import configs
+
+        for slug, config in configs():
+            conn.execute(
+                "INSERT INTO agents(slug,name,config) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
+                (slug, config["name"], Jsonb(config)),
+            )
+
 
 def new_id():
     return str(uuid.uuid4())

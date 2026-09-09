@@ -58,6 +58,10 @@ Apply configuration changes with `docker compose up -d`. In the console, choose 
 
 Your provider key stays in the API service. Sandboxes receive a short-lived, run-scoped token instead. Agentberth currently supports the OpenRouter chat-completions protocol and requires a model/provider route that supports tool calling when tools are enabled. Model IDs and availability can change; choose another supported model in Configure if needed. Model calls incur provider charges.
 
+## Try varied example agents
+
+Select **Sales data auditor**, **Project dependency planner**, or **Release notes editor** to load a task specific to that agent. These use your configured OpenRouter model and produce multiple downloadable files. Configure each agent’s **Suggested task** to supply your own starting prompt. See [example workflows and live verification](docs/examples.md).
+
 ## Add a custom tool
 
 The standard package format is `tool.json`, `handler.py`, and `tests.json`. Default tools live under `tools/builtin`; custom tools can be authored through **Tools** in the console or imported from a folder:

@@ -124,3 +124,9 @@ Supported archive uploads automatically select/invoke the archive tool. `GET /v1
 ## Queue and schedules
 
 `GET /v1/queue` reports queue counts/capacity. `GET` and `POST /v1/schedules` list/create one-time or fixed-interval schedules; `PATCH /v1/schedules/{id}` pauses/resumes and `DELETE` removes future scheduling while preserving runs. All require administration authentication. Run responses include nullable `schedule_id` and `scheduled_for`. See [the complete scheduling contract and runnable example](scheduling.md).
+
+## Suggested agent tasks
+
+Agent creation/update accepts optional `example_task` (up to 8,000 characters, default empty). Agent responses expose it in `config`. It is a playground/schedule-form suggestion, not automatically executed; run requests still require `input`. Bundled OpenRouter workflows and live verification are documented in [examples](examples.md).
+
+`max_output_tokens` controls the maximum output allowance per model call (256–16,384; default 2,048). It is saved in agent/run/schedule snapshots and configurable in the GUI. Legacy snapshots without the field retain the 2,048-token limit. Model-completed events include the provider’s `finish_reason` when supplied to help diagnose truncated or empty responses.

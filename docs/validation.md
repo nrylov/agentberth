@@ -83,3 +83,12 @@ The DigitalOcean OpenRouter/custom-tool integration also passed: 3 model calls, 
 - GUI verification: created a one-time schedule and opened its completed run and report; inspected the scheduling page and corrected sidebar label visually.
 - Existing local auth/run/idempotency/event/artifact/cancellation smoke checks passed. File/archive regression checks also passed, including exact binary downloads, automatic archive extraction, multi-output ZIPs, and input expiry.
 - CI definitions now include scheduler checks and the recurring example, but the updated GitHub Actions workflow has not been observed running. This scheduling increment was not retested on kind or MicroK8s.
+
+## Varied agent examples (2026-09-09)
+
+- **60 unit/contract tests passed**, plus Ruff, Prettier, and production frontend builds.
+- GUI checks verified that selecting the auditor/planner loads distinct prompts, switching preserves a draft, and Use suggested task restores the example.
+- Live OpenRouter validation on Docker: sales auditor completed in 8 model calls ($0.04052775), dependency planner in 6 ($0.038214). Verified five valid CSV rows and regional/overall revenue, baseline/delayed finish days 10/12, required output files, and ZIP downloads.
+- Two initial auditor attempts returned empty model answers at the legacy 2,048-token allowance. The successful checks used the new configurable 8,192-token allowance; no automatic retries or silent model substitutions were added.
+- Final image deployed to DigitalOcean; verified all three example records, task suggestions, output allowances, and worker health. Live example runs were performed on Docker only. Release notes editor is bundled and schema-validated but was not live-tested in this increment.
+- Bundled examples are inserted only when absent, preserving existing administrator configuration. Older agents and run snapshots keep the default output allowance.
