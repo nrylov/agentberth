@@ -1,70 +1,125 @@
 # Agentberth
 
-**Package agents. Bring your model. Deploy an API.**
+**A platform for running tool-equipped AI agents behind an API.**
 
-Agentberth is a local-first agent execution platform. Configure an agent in the console, give it tools, and invoke it through an authenticated HTTP endpoint. Every run executes in a fresh Docker container or Kubernetes Job with a temporary workspace.
+Agentberth brings agent configuration, isolated execution, task scheduling, and file processing into one application. Define an agent through the web console or API, equip it with versioned tools, and submit tasks to a persistent queue. Each run receives its own execution environment and temporary workspace, with a recorded history of model calls, tool activity, and generated artifacts.
 
-**Status: working preview (v0.1).** Docker Compose, Kubernetes Jobs/Helm deployment, task queueing, and one-time/repeating schedules are implemented. VM-backed execution remains planned. This is a single-administrator development system, not a production multi-tenant service.
+Run the platform with Docker Compose or deploy it to Kubernetes with Helm. Both deployment modes use the same console, API, tool packages, and agent runtime.
+
+**Project status:** functional preview for development and evaluation by a single trusted administrator. Docker and Kubernetes execution are implemented; multi-tenant authorization, high availability, and microVM execution remain outside the current release. See the [security model](docs/security.md) and [roadmap](docs/roadmap.md) for scope and limitations.
+
+## Capabilities
+
+- **Agent APIs:** configure instructions, model settings, and tools; invoke agents through authenticated endpoints with idempotent submission support.
+- **Isolated execution:** run each task in a dedicated Docker container or Kubernetes Job with resource limits, execution deadlines, and automatic cleanup.
+- **Versioned tools:** author Python tool packages, validate them in a sandbox, publish immutable versions, and select tools per agent or per run.
+- **Persistent scheduling:** queue tasks, schedule one-time or fixed-interval runs, and pause, resume, or delete schedules through the console or API.
+- **File workflows:** attach files or ZIP/TAR archives, process them in an ephemeral workspace, and download outputs individually or as a combined ZIP.
+- **Execution visibility:** inspect persisted events, stream progress with server-sent events, review token usage and reported cost, and cancel pending or running tasks.
+- **Reproducible examples:** start with a deterministic demonstration without model credentials, then explore multi-step OpenRouter agents for data analysis and planning.
 
 ## Quick start
 
-Prerequisites: Docker with Compose v2 or later, running Linux containers. Docker Desktop works on macOS; no local Python, Node, Kubernetes, or model API key is required for the demo. Allow a few minutes for the initial image downloads/build.
+**Requirements:** Docker with Compose v2 or later, configured to run Linux containers. Docker Desktop supports the macOS setup. The initial demonstration requires no model API key or additional language runtimes.
 
-After cloning this repository:
+From the repository root:
 
 ```bash
-cd agentberth
-cp .env.example .env  # skip this if you already configured .env
+cp .env.example .env
 docker compose up --build -d
 ```
 
-Open **[localhost:8080](http://localhost:8080)**, select **Harbor guide**, and click **Run agent**. The deterministic demo executes Python and writes `report.md`; it does not call an LLM or interpret arbitrary instructions. Follow the activity stream and download the artifact from the Result tab.
+If `.env` already exists, retain your configuration instead of copying over it.
 
-The console uses `agentberth-local` as its default local administration key. If you set a custom `AGENTBERTH_ADMIN_KEY`, enter it in the connection dialog. The service binds to loopback only. See the [security model](docs/security.md) before sharing access.
+Open [http://localhost:8080](http://localhost:8080), select **Harbor guide**, and choose **Run agent**. The demonstration executes Python and creates `report.md`; inspect the activity stream and download the report from **Result**. This provider runs a fixed workflow so the installation can be verified without an LLM call.
 
-Stop services without deleting your runs:
+The Compose configuration binds the console to the loopback interface. Its development administration key is `agentberth-local`; set `AGENTBERTH_ADMIN_KEY` in `.env` to use a custom key, then enter that key in the console. The public development key is not suitable for shared access.
+
+To stop the application while retaining its database and artifacts:
 
 ```bash
 docker compose down
 ```
 
-`docker compose down -v` also permanently deletes the local database and artifacts. Use it only when you want a full reset.
+## OpenRouter examples
 
-## Queue and schedule tasks
-
-Open **Schedules** to inspect pending tasks, schedule a one-time run, or repeat a task at a fixed interval. Pause/resume/delete controls are available through both the GUI and API. Schedules persist in PostgreSQL and work with Docker and Kubernetes.
-
-Try the no-credit recurring report example:
+Set `LLM_API_KEY` in `.env` and configure `LLM_MODEL` with an OpenRouter model ID that supports tool calling. The supported provider endpoint is `https://openrouter.ai/api/v1`. Apply the configuration with:
 
 ```bash
-python3 scripts/example_schedules.py
+docker compose up -d
 ```
 
-It runs twice, downloads two reports, and leaves the schedule paused for inspection. See [scheduling semantics and API examples](docs/scheduling.md) and [Kubernetes setup](docs/kubernetes.md).
+The console includes three agents with distinct suggested tasks:
 
-## Connect a real model
+| Agent | Workflow | Deliverables |
+| --- | --- | --- |
+| **Sales data auditor** | Validate CSV data, remove duplicate and invalid rows, account for refunds, and verify regional totals | Cleaned CSV, JSON summary, audit report |
+| **Project dependency planner** | Validate dependencies, calculate a critical path, and assess the effect of a delayed task | Schedule CSV, calculation checks, plan with dependency diagram |
+| **Release notes editor** | Turn engineering notes into release notes while distinguishing shipped features from future plans | Release notes and QA checklist |
 
-Set these values in your **gitignored** `.env` file:
+Select an agent to load its task. Prompts, instructions, tools, and generation limits are editable. A blank agent-level model setting uses the deployment's `LLM_MODEL`.
 
-```dotenv
-LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_MODEL=google/gemini-3.8-flash
-LLM_API_KEY=your-key-here
+Provider credentials remain in the API service; sandboxes receive short-lived run tokens. OpenRouter calls incur provider charges. See [example workflows and live verification](docs/examples.md) for expected outputs and a runnable validation script.
+
+## API usage
+
+Submit a task to the demonstration agent:
+
+```bash
+curl --fail-with-body http://localhost:8080/v1/deployments/harbor-guide/runs \
+  -H 'Authorization: Bearer agentberth-local' \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: first-demo-run' \
+  -d '{"input":"Create a demonstration report."}'
 ```
 
-Apply configuration changes with `docker compose up -d`. In the console, choose **New agent**, select **OpenRouter**, enable the tools you want, and create it. A blank model override uses `LLM_MODEL`. Then try:
+The API returns **202 Accepted** with the run ID, status URL, and event-stream URL. Replace `RUN_ID` with the returned ID to inspect the result or stream progress:
 
-> Use Python to calculate the average of 12, 18, and 24. Write a short report to report.md.
+```bash
+curl --fail-with-body http://localhost:8080/v1/runs/RUN_ID \
+  -H 'Authorization: Bearer agentberth-local'
 
-Your provider key stays in the API service. Sandboxes receive a short-lived, run-scoped token instead. Agentberth currently supports the OpenRouter chat-completions protocol and requires a model/provider route that supports tool calling when tools are enabled. Model IDs and availability can change; choose another supported model in Configure if needed. Model calls incur provider charges.
+curl --no-buffer http://localhost:8080/v1/runs/RUN_ID/events \
+  -H 'Authorization: Bearer agentberth-local'
+```
 
-## Try varied example agents
+Use your configured administration key when it differs from the development key. The [API guide](docs/api.md) covers agent management, tools, scheduling, file uploads, and artifact downloads. A running deployment exposes its [OpenAPI schema](http://localhost:8080/openapi.json).
 
-Select **Sales data auditor**, **Project dependency planner**, or **Release notes editor** to load a task specific to that agent. These use your configured OpenRouter model and produce multiple downloadable files. Configure each agent’s **Suggested task** to supply your own starting prompt. See [example workflows and live verification](docs/examples.md).
+## Architecture
 
-## Add a custom tool
+```mermaid
+flowchart LR
+    Console[React / TypeScript console] --> API[FastAPI control API]
+    Client[API clients] --> API
+    API --> Database[(PostgreSQL)]
+    Worker[Worker and scheduler] --> Database
+    Worker --> Docker[Docker run container]
+    Worker --> Kubernetes[Kubernetes run Job]
+    Docker -->|Run-scoped requests| API
+    Kubernetes -->|Run-scoped requests| API
+    API --> OpenRouter[OpenRouter model gateway]
+```
 
-The standard package format is `tool.json`, `handler.py`, and `tests.json`. Default tools live under `tools/builtin`; custom tools can be authored through **Tools** in the console or imported from a folder:
+The API manages configuration, authentication, tool registration, and the model gateway. PostgreSQL stores the queue, schedules, immutable run snapshots, events, and artifacts. A separate worker evaluates schedules and executes one queued task at a time through the selected backend.
+
+Agent and tool configuration is captured when a run is accepted; schedules retain their own configuration snapshots. Later edits do not change work already accepted. Uploaded input bytes expire when a run reaches a terminal state, while run metadata and generated artifacts remain available.
+
+The worker manages Docker through its socket or Kubernetes through a scoped service account. Run environments receive neither the Docker socket nor database or provider credentials. Container isolation and network controls are described in the [architecture](docs/architecture.md) and [security documentation](docs/security.md); they are not a guarantee of safe execution for arbitrary untrusted workloads.
+
+## Deployment options
+
+| Deployment | Execution backend | Setup |
+| --- | --- | --- |
+| Docker Compose | One Docker container per run | [Quick start](#quick-start) |
+| Kubernetes with Helm | One Kubernetes Job per run | [Installation and operations guide](docs/kubernetes.md) |
+
+The Kubernetes guide covers registry configuration, credentials, storage, network policies, upgrades, and access through port-forwarding. It includes DigitalOcean, kind, and MicroK8s configurations; the [validation record](docs/validation.md) identifies which environments have been tested.
+
+Deployments are independent: each maintains its own agents, tool registry, schedules, database, and run history. MicroVM-backed execution is a future extension, not a requirement for either supported deployment mode.
+
+## Extending the platform
+
+Tools use a repository-friendly package format: `tool.json`, `handler.py`, and `tests.json`. Bundled tools reside in `tools/builtin`. Create custom tools in the console or import, test, and publish a package with the CLI:
 
 ```bash
 python3 scripts/tools.py import tools/examples/summarize-csv
@@ -72,99 +127,46 @@ python3 scripts/tools.py test summarize-csv 1.0.0
 python3 scripts/tools.py publish summarize-csv 1.0.0
 ```
 
-Then add `summarize-csv@1.0.0` under **Tools for this run**, or save it in an agent's defaults. See the [package format and tutorial](docs/tools.md). Sandbox fixture tests need no LLM credits.
+Published versions can be added to an agent or selected for an individual run. Tool fixture tests execute in the sandbox without making model calls. See the [tool authoring guide](docs/tools.md) for the format, lifecycle, and examples.
 
-## Invoke an endpoint
+## Development and verification
 
-The default example is available as `harbor-guide`:
+The repository includes locked dependencies, Python unit and API contract tests, frontend checks, database integration tests, and Docker/Kubernetes workflow checks. GitHub Actions is configured to exercise the deterministic workflows without provider credentials.
 
-```bash
-curl -s http://localhost:8080/v1/deployments/harbor-guide/runs \
-  -H 'Authorization: Bearer agentberth-local' \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: my-first-run' \
-  -d '{"input":"Create a demo report."}'
-```
-
-This returns `202 Accepted` with an `id`, `status_url`, and `events_url`. Use the returned run ID:
-
-```bash
-curl -N http://localhost:8080/v1/runs/RUN_ID/events \
-  -H 'Authorization: Bearer agentberth-local'
-
-curl -s http://localhost:8080/v1/runs/RUN_ID \
-  -H 'Authorization: Bearer agentberth-local'
-```
-
-Change the key in these examples if you configured your own. See the [API guide](docs/api.md) and the machine-readable [OpenAPI schema](http://localhost:8080/openapi.json).
-
-## What works today
-
-- Agent creation and configuration with stable invocation URLs.
-- Configuration version counters and immutable configuration snapshots for accepted runs.
-- Docker containers with CPU, memory, process, filesystem, and wall-clock limits.
-- Versioned tool registry, repository-based default tools, custom Python packages, and sandbox fixture tests.
-- Per-run tool additions/disabling, package import/export, and immutable package snapshots.
-- Python execution and UTF-8 file read/write tools.
-- Deterministic demo provider and real OpenRouter tool-calling loops.
-- Durable run history, resumable server-sent events, and downloadable binary/text artifacts and combined ZIP downloads.
-- Model step limits, usage/cost reporting, cancellation, and interrupted-run recovery.
-- Locked dependencies, unit tests, Compose integration scripts, and a GitHub Actions workflow.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    UI[React console] --> API[FastAPI control API]
-    Client[API client] --> API
-    API --> DB[(PostgreSQL)]
-    Worker[Docker worker] --> DB
-    Worker --> Sandbox[Agent + tools container]
-    Sandbox -->|Run-scoped HTTP| API
-    API -->|Provider key| OpenRouter
-```
-
-The API and worker are separate processes. Only the worker mounts the Docker socket. Sandboxes do not receive host mounts, database credentials, or LLM keys. A private sandbox network connects them to the API; the API has a separate outbound network for model calls.
-
-## Documentation
-
-- [Architecture and lifecycle](docs/architecture.md)
-- [API reference and examples](docs/api.md)
-- [Local development and troubleshooting](docs/development.md)
-- [Tool authoring](docs/tools.md)
-- [Security model and limitations](docs/security.md)
-- [Kubernetes and microVM roadmap](docs/roadmap.md)
-- [Local validation record](docs/validation.md)
-- [Contributing](CONTRIBUTING.md)
-
-## Verify your installation
-
-The smoke test requires Python 3.10+ on the host and a running Compose stack:
+With the Compose stack running and Python 3.10 or later available, verify the core workflow:
 
 ```bash
 python3 scripts/smoke.py
 ```
 
-To additionally test a real model call (uses configured credits):
+To exercise persistent scheduling, run the recurring report example. It waits for two completed runs, downloads their reports, and leaves the schedule paused:
 
 ```bash
-python3 scripts/smoke.py --live
+python3 scripts/example_schedules.py
 ```
 
-These tests create clearly named example agents and runs in your local database. Automated CI uses the demo provider and needs no secrets. The fault-injection test in `scripts/resilience.py` also restarts the worker; run it only on a development stack with no important active runs.
+These scripts create agents and run records for inspection. Additional checks, including opt-in model calls and fault-injection tests, are documented in the [development guide](docs/development.md), [scheduling guide](docs/scheduling.md), and [validation record](docs/validation.md).
+
+## Documentation
+
+| Guide | Contents |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Components, execution lifecycle, and backend design |
+| [API reference](docs/api.md) | Authentication, endpoints, and request examples |
+| [Example agents](docs/examples.md) | OpenRouter workflows and output verification |
+| [Tools](docs/tools.md) | Package format, testing, publication, and versioning |
+| [Files and archives](docs/files.md) | Uploads, input expiry, downloads, and GUI/API parity |
+| [Scheduling](docs/scheduling.md) | Queue behavior, recurrence, overlap, and recovery semantics |
+| [Kubernetes](docs/kubernetes.md) | Deployment configuration and operations |
+| [Development](docs/development.md) | Setup, checks, and troubleshooting |
+| [Security](docs/security.md) | Trust boundaries and current limitations |
+| [Roadmap](docs/roadmap.md) | Implemented capabilities and planned extensions |
+| [Validation](docs/validation.md) | Recorded test results and environment coverage |
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines. Changes to runtime behavior, configuration, or the API should include corresponding tests and documentation.
 
 ## License
 
-[Apache License 2.0](LICENSE).
-
-### Console appearance
-
-The console opens in dark mode by default. Use the sun/moon switch in the top bar to select light mode or return to dark mode. Your choice is saved in this browser and restored on reload.
-
-### File processing
-
-Attach temporary input files or ZIP/TAR archives to a run in the console or API. Archives are automatically extracted in the sandbox. Download generated text/binary files individually or together as ZIP. [File workflow, runnable examples, and GUI/API parity](docs/files.md) explain limits and input expiry.
-
-### Kubernetes
-
-Deploy the same application independently on Kubernetes using the Helm chart and Job execution backend. Docker Compose remains the laptop default. See [Kubernetes installation, DigitalOcean/kind/MicroK8s examples, tests, and operations](docs/kubernetes.md). The cluster deployment has its own database and run history; use local port 8081 for its port-forward while Compose uses 8080.
+Agentberth is licensed under the [Apache License 2.0](LICENSE).
