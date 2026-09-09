@@ -22,7 +22,7 @@ Example creation body:
   "instructions": "Use Python when useful. Save requested reports as text files.",
   "provider": "openrouter",
   "model": "",
-  "tools": ["python", "write_file", "read_file"],
+  "tools": [{"id":"python","version":"1.0.0"}, {"id":"write-file","version":"1.0.0"}, {"id":"read-file","version":"1.0.0"}],
   "max_steps": 6,
   "timeout_seconds": 120
 }
@@ -92,3 +92,21 @@ Input, tool arguments/results, and artifacts can contain user data. Provider-int
 Limits: 8,000 input characters; 1–12 model calls; 2,048 completion tokens per call including any provider reasoning; 10–300 seconds per run; up to 8 tool calls per model turn; 10 seconds per Python tool; 50 queued runs; 600 KB HTTP request bodies. Prompt/context growth contributes to cost across turns.
 
 Internal `/internal/runs/{id}/...` routes are reserved for the runtime and require a separate run-scoped token. They are not a public client integration surface.
+
+
+## Tool registry
+
+All routes below require the administration key. The current workspace has one trusted administrator; deployment-scoped authorization remains future work.
+
+| Method | Path | Behavior |
+|---|---|---|
+| GET | `/v1/tools` | Versions, manifests, hashes, publication and latest test status |
+| POST | `/v1/tools/import` | Validate/register an immutable draft from a package envelope |
+| POST | `/v1/tools/reload` | Transactionally register packages from the bundled directory |
+| GET | `/v1/tools/{id}/{version}/export` | Download a JSON package envelope |
+| POST | `/v1/tools/{id}/{version}/test` | Submit a key-free sandbox fixture run (202) |
+| POST | `/v1/tools/{id}/{version}/publish` | Publish after a successful matching test run |
+
+A package envelope contains `manifest`, `handler`, and `tests`. See [Tool Package v1](tools.md) for the complete contract. Conflicting contents at an existing ID/version return 409. Malformed packages and unresolved/draft tool references return 422. Test calls return the same run links as normal invocation, so status, streaming, and cancellation work identically.
+
+Run invocation also accepts optional `additional_tools: [{"id":"summarize-csv","version":"1.0.0"}]` and `disabled_tools: ["python"]`. Disabled entries refer to inherited tool IDs. Duplicate IDs/names are rejected. These selections are included in idempotency checks. Run detail includes `resolved_tools` with IDs, versions, model-facing names, and package hashes. Legacy builtin string names are still accepted in agent configurations for compatibility, but responses use explicit references.

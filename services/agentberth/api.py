@@ -29,7 +29,9 @@ from agentberth.schemas import (
     RunDetail,
     WorkspaceSettings,
 )
-from runtime.tools import definitions
+from runtime.packages import definitions
+from agentberth import registry
+from jsonschema.exceptions import SchemaError, ValidationError
 
 ADMIN_KEY = os.getenv("ADMIN_KEY", "agentberth-local")
 MODEL = os.getenv("LLM_MODEL", "google/gemini-3.8-flash")
@@ -48,6 +50,26 @@ async def lifespan(app):
 
 
 app = FastAPI(title="Agentberth API", version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None)
+
+
+@app.exception_handler(registry.Conflict)
+async def registry_conflict(request, exc):
+    return Response(json.dumps({"detail": str(exc)}), status_code=409, media_type="application/json")
+
+
+@app.exception_handler(ValueError)
+async def package_value_error(request, exc):
+    return Response(json.dumps({"detail": str(exc)[:500]}), status_code=422, media_type="application/json")
+
+
+@app.exception_handler(SchemaError)
+@app.exception_handler(ValidationError)
+async def package_schema_error(request, exc):
+    return Response(
+        json.dumps({"detail": "Package schema or fixture is invalid: " + exc.message[:300]}),
+        status_code=422,
+        media_type="application/json",
+    )
 
 
 @app.middleware("http")
@@ -134,6 +156,7 @@ def create_agent(body: CreateAgent):
     config = body.model_dump(exclude={"slug"})
     try:
         with db.connect() as conn:
+            registry.resolve(conn, config["tools"])
             return conn.execute(
                 "INSERT INTO agents(slug,name,config) VALUES (%s,%s,%s) RETURNING *",
                 (body.slug, body.name, Jsonb(config)),
@@ -145,6 +168,7 @@ def create_agent(body: CreateAgent):
 @app.put("/v1/agents/{slug}", response_model=AgentRecord, dependencies=[Depends(admin)])
 def update_agent(slug: str, body: AgentConfig):
     with db.connect() as conn:
+        registry.resolve(conn, body.model_dump()["tools"])
         row = conn.execute(
             "UPDATE agents SET name=%s,config=%s,version=version+1,updated_at=now() "
             "WHERE slug=%s RETURNING *",
@@ -159,7 +183,13 @@ def update_agent(slug: str, body: AgentConfig):
     "/v1/deployments/{slug}/runs", status_code=202, response_model=RunLinks, dependencies=[Depends(admin)]
 )
 def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(default=None, max_length=150)):
-    request_hash = hashlib.sha256(body.input.encode()).hexdigest()
+    # Preserve idempotency for pre-registry calls with no overrides.
+    hash_input = (
+        body.input
+        if not body.additional_tools and not body.disabled_tools
+        else json.dumps(body.model_dump(), sort_keys=True, separators=(",", ":"))
+    )
+    request_hash = hashlib.sha256(hash_input.encode()).hexdigest()
     with db.connect() as conn:
         # Serialize submissions for one deployment; acceptance and event are atomic.
         agent = conn.execute("SELECT * FROM agents WHERE slug=%s FOR UPDATE", (slug,)).fetchone()
@@ -181,6 +211,9 @@ def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(defau
             raise HTTPException(422, "This release supports the OpenRouter endpoint only.")
         if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:
             raise HTTPException(429, "The local queue is full. Try again after some runs finish.")
+        spec["tools"], spec["tool_packages"] = registry.snapshot(
+            conn, spec["tools"], [r.model_dump() for r in body.additional_tools], body.disabled_tools
+        )
         spec["model"] = spec["model"] or MODEL
         run_id = db.new_id()
         conn.execute(
@@ -206,6 +239,8 @@ def runs():
 def run(run_id: str):
     with db.connect() as conn:
         row = get_run(conn, run_id)
+        spec = conn.execute("SELECT spec FROM runs WHERE id=%s", (run_id,)).fetchone()["spec"]
+        row["resolved_tools"] = registry.refs(spec.get("tool_packages", []))
         row["artifacts"] = conn.execute(
             "SELECT id,name,octet_length(content) AS size FROM artifacts WHERE run_id=%s ORDER BY name",
             (run_id,),
@@ -331,7 +366,7 @@ def model(run_id: str, body: ModelRequest, authorization: str = Header(default="
         "max_tokens": 2048,
         "provider": {"require_parameters": True},
     }
-    tools = definitions(spec["tools"])
+    tools = definitions(spec["tool_packages"])
     if tools:
         payload["tools"] = tools
     try:
@@ -377,6 +412,108 @@ def model(run_id: str, body: ModelRequest, authorization: str = Header(default="
                 },
             )
     return {"message": message}
+
+
+@app.get("/v1/tools", dependencies=[Depends(admin)])
+def tools_library():
+    with db.connect() as conn:
+        return conn.execute(
+            "SELECT t.tool_id,t.version,t.name,t.sha256,t.status,t.origin,t.created_at,t.test_run_id,r.status AS test_status,t.package->'manifest' AS manifest FROM tool_versions t LEFT JOIN runs r ON r.id=t.test_run_id ORDER BY t.tool_id,t.created_at DESC"
+        ).fetchall()
+
+
+@app.post("/v1/tools/import", status_code=201, dependencies=[Depends(admin)])
+def import_tool(body: dict):
+    with db.connect() as conn:
+        return registry.register(conn, body)
+
+
+@app.post("/v1/tools/reload", dependencies=[Depends(admin)])
+def reload_tools():
+    with db.connect() as conn:
+        return [
+            {"id": row["tool_id"], "version": row["version"], "sha256": row["sha256"]}
+            for row in registry.bundled(conn)
+        ]
+
+
+@app.get("/v1/tools/{tool_id}/{version}/export", dependencies=[Depends(admin)])
+def export_tool(tool_id: str, version: str):
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT package FROM tool_versions WHERE tool_id=%s AND version=%s", (tool_id, version)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Tool version not found.")
+    return Response(
+        json.dumps(row["package"], indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{row["package"]["manifest"]["id"]}.tool.json"'
+        },
+    )
+
+
+@app.post("/v1/tools/{tool_id}/{version}/test", status_code=202, dependencies=[Depends(admin)])
+def test_tool(tool_id: str, version: str):
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s FOR UPDATE", (tool_id, version)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Tool version not found.")
+        if row["test_run_id"]:
+            previous = conn.execute("SELECT status FROM runs WHERE id=%s", (row["test_run_id"],)).fetchone()
+            if previous and previous["status"] not in db.TERMINAL:
+                return run_links(row["test_run_id"])
+        if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:
+            raise HTTPException(429, "The local queue is full. Try again after some runs finish.")
+        package = {**row["package"], "sha256": row["sha256"]}
+        spec = {
+            "provider": "demo",
+            "model": "",
+            "tools": [row["name"]],
+            "tool_packages": [package],
+            "tool_test": True,
+            "max_steps": 1,
+            "timeout_seconds": min(
+                300, len(package["tests"]) * (package["manifest"]["limits"]["timeout_seconds"] + 2) + 10
+            ),
+        }
+        run_id = db.new_id()
+        conn.execute(
+            "INSERT INTO runs(id,agent_slug,version,spec,input) VALUES (%s,'harbor-guide',1,%s,%s)",
+            (run_id, Jsonb(spec), f"Test tool {tool_id}@{version}"),
+        )
+        conn.execute(
+            "UPDATE tool_versions SET test_run_id=%s WHERE tool_id=%s AND version=%s",
+            (run_id, tool_id, version),
+        )
+        db.event(conn, run_id, "run.queued", {"purpose": "tool_test", "sha256": row["sha256"]})
+        return run_links(run_id)
+
+
+@app.post("/v1/tools/{tool_id}/{version}/publish", dependencies=[Depends(admin)])
+def publish_tool(tool_id: str, version: str):
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s FOR UPDATE", (tool_id, version)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Tool version not found.")
+        if row["status"] == "published":
+            return {"status": "published", "sha256": row["sha256"]}
+        run = conn.execute("SELECT status,spec FROM runs WHERE id=%s", (row["test_run_id"],)).fetchone()
+        if (
+            not run
+            or run["status"] != "completed"
+            or run["spec"]["tool_packages"][0]["sha256"] != row["sha256"]
+        ):
+            raise HTTPException(409, "Run the package fixtures successfully before publishing.")
+        conn.execute(
+            "UPDATE tool_versions SET status='published' WHERE tool_id=%s AND version=%s", (tool_id, version)
+        )
+        return {"status": "published", "sha256": row["sha256"]}
 
 
 web = Path(os.getenv("WEB_DIR", "/app/web"))

@@ -39,3 +39,12 @@ Prompt injection can change an agent's behavior within its permitted tools. The 
 ## Before production
 
 Add tenant authorization, per-deployment credentials, encrypted secret storage/rotation, migrations/backups/retention, image pinning/signing/scanning, explicit egress enforcement, distributed worker fencing, quotas, durable external side-effect handling, and tested recovery on the target infrastructure. VM isolation is an additional boundary, not a substitute for these controls.
+
+
+## Custom tool packages
+
+Registry import and reload are administration-only actions. Imports never execute handler code in the control plane. Packages have bounded sizes, fixed file/entrypoint conventions, explicit schemas without remote references, and content hashes. Only published versions can be attached to ordinary runs. Imported drafts require a successful sandbox fixture run before publication.
+
+Publication and tests are functional checks, not a certification of code safety. All tools in one run share the container trust boundary; arbitrary Python may bypass workspace helpers or inspect other same-user processes. Run-only selection does not create per-tool network/credential permissions. Tool test fixtures supplied by an author can be incomplete or misleading, and hostile code may interfere with its own sandbox. Review code and fixtures before publishing.
+
+No arbitrary dependency installation, host-side imports, remote tool fetching, or autonomous LLM publication is implemented. LLM-generated source will eventually enter the same draft workflow.

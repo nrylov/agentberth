@@ -17,6 +17,10 @@
 - Real OpenRouter tool loop.
 - Documentation, checks, and clear limitations.
 
+## Tool registry foundation: implemented
+
+Repository packages (`tool.json`, `handler.py`, `tests.json`), persistent immutable versions, sandbox fixtures, publication, import/export, agent defaults, and per-run overrides are implemented. Runtime tests use the same container lifecycle and do not call an LLM. LLM-assisted draft generation remains planned and will produce this format.
+
 ## Milestone 2: Kubernetes as a first-class backend
 
 Implement a `KubernetesBackend` that creates one Job per run. The portable runtime should retain the same callback/context/model protocol. Add configuration for image, namespace, service account, node placement, and optional runtime class.

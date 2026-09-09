@@ -1,0 +1,42 @@
+{
+  "format_version": 1,
+  "id": "python",
+  "version": "1.0.0",
+  "name": "python",
+  "description": "Run Python in the temporary workspace. Standard library only. Print the result.",
+  "runtime": "python",
+  "entrypoint": "handler.py:run",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "code": {
+        "type": "string",
+        "maxLength": 20000
+      }
+    },
+    "required": [
+      "code"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "exit_code": {
+        "type": "integer"
+      },
+      "output": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "exit_code",
+      "output"
+    ],
+    "additionalProperties": false
+  },
+  "limits": {
+    "timeout_seconds": 15,
+    "max_output_bytes": 32000
+  }
+}

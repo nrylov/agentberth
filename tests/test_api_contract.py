@@ -20,3 +20,14 @@ def test_public_schema_has_bearer_auth_and_excludes_internal_routes():
     assert not any(path.startswith("/internal/") for path in schema["paths"])
     assert "token_hash" not in schema["components"]["schemas"]["RunDetail"]["properties"]
     assert "LLM_API_KEY" not in str(schema)
+
+
+def test_malformed_tool_selection_returns_validation_error():
+    from agentberth.api import ADMIN_KEY
+
+    response = TestClient(app).post(
+        "/v1/agents",
+        headers={"Authorization": "Bearer " + ADMIN_KEY},
+        json={"slug": "invalid-tools", "name": "Example", "instructions": "Help.", "tools": None},
+    )
+    assert response.status_code == 422

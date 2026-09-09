@@ -1,0 +1,46 @@
+{
+  "format_version": 1,
+  "id": "write-file",
+  "version": "1.0.0",
+  "name": "write_file",
+  "description": "Write a UTF-8 text artifact in the temporary workspace.",
+  "runtime": "python",
+  "entrypoint": "handler.py:run",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "content": {
+        "type": "string",
+        "maxLength": 64000
+      }
+    },
+    "required": [
+      "path",
+      "content"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "bytes": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "path",
+      "bytes"
+    ],
+    "additionalProperties": false
+  },
+  "limits": {
+    "timeout_seconds": 10,
+    "max_output_bytes": 32000
+  }
+}

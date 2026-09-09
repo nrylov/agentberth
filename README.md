@@ -46,6 +46,18 @@ Apply configuration changes with `docker compose up -d`. In the console, choose 
 
 Your provider key stays in the API service. Sandboxes receive a short-lived, run-scoped token instead. Agentberth currently supports the OpenRouter chat-completions protocol and requires a model/provider route that supports tool calling when tools are enabled. Model IDs and availability can change; choose another supported model in Configure if needed. Model calls incur provider charges.
 
+## Add a custom tool
+
+The standard package format is `tool.json`, `handler.py`, and `tests.json`. Default tools live under `tools/builtin`; custom tools can be authored through **Tools** in the console or imported from a folder:
+
+```bash
+python3 scripts/tools.py import tools/examples/summarize-csv
+python3 scripts/tools.py test summarize-csv 1.0.0
+python3 scripts/tools.py publish summarize-csv 1.0.0
+```
+
+Then add `summarize-csv@1.0.0` under **Tools for this run**, or save it in an agent's defaults. See the [package format and tutorial](docs/tools.md). Sandbox fixture tests need no LLM credits.
+
 ## Invoke an endpoint
 
 The default example is available as `harbor-guide`:
@@ -75,6 +87,8 @@ Change the key in these examples if you configured your own. See the [API guide]
 - Agent creation and configuration with stable invocation URLs.
 - Configuration version counters and immutable configuration snapshots for accepted runs.
 - Docker containers with CPU, memory, process, filesystem, and wall-clock limits.
+- Versioned tool registry, repository-based default tools, custom Python packages, and sandbox fixture tests.
+- Per-run tool additions/disabling, package import/export, and immutable package snapshots.
 - Python execution and UTF-8 file read/write tools.
 - Deterministic demo provider and real OpenRouter tool-calling loops.
 - Durable run history, resumable server-sent events, and downloadable text artifacts.

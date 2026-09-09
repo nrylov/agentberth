@@ -1,0 +1,45 @@
+{
+  "format_version": 1,
+  "id": "summarize-csv",
+  "version": "1.0.0",
+  "name": "summarize_csv",
+  "description": "Count data rows and list columns in a CSV workspace file.",
+  "runtime": "python",
+  "entrypoint": "handler.py:run",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "path"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "row_count": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "columns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "row_count",
+      "columns"
+    ],
+    "additionalProperties": false
+  },
+  "limits": {
+    "timeout_seconds": 10,
+    "max_output_bytes": 32000
+  }
+}

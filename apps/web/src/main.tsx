@@ -24,13 +24,14 @@ import {
   X,
 } from "lucide-react";
 import "./style.css";
+import { ToolsView, refKey, type ToolRef, type ToolRecord } from "./ToolsView";
 
 type Config = {
   name: string;
   instructions: string;
   provider: "demo" | "openrouter";
   model: string;
-  tools: string[];
+  tools: ToolRef[];
   max_steps: number;
   timeout_seconds: number;
 };
@@ -50,6 +51,12 @@ type Run = {
   cost: string | number;
   cancel_requested: boolean;
   artifacts?: { id: string; name: string; size: number }[];
+  resolved_tools?: {
+    id: string;
+    version: string;
+    sha256: string;
+    name: string;
+  }[];
 };
 type RunEvent = {
   id: number;
@@ -62,7 +69,7 @@ type Settings = {
   worker_online: boolean;
   demo_key: boolean;
 };
-type View = "playground" | "runs" | "settings";
+type View = "playground" | "runs" | "settings" | "tools";
 const terminal = new Set(["completed", "failed", "cancelled", "timed_out"]);
 const initial: Config = {
   name: "",
@@ -70,7 +77,10 @@ const initial: Config = {
     "Help the user. Use tools when useful. Save requested deliverables to files in the workspace.",
   provider: "demo",
   model: "",
-  tools: ["python", "write_file", "read_file"],
+  tools: ["python", "write-file", "read-file"].map((id) => ({
+    id,
+    version: "1.0.0",
+  })),
   max_steps: 6,
   timeout_seconds: 120,
 };
@@ -87,6 +97,13 @@ function App() {
   const [selected, setSelected] = useState("harbor-guide");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
+  const [tools, setTools] = useState<ToolRecord[]>([]);
+  const [additionalTools, setAdditionalTools] = useState<ToolRef[]>([]);
+  const [disabledTools, setDisabledTools] = useState<string[]>([]);
+  useEffect(() => {
+    setAdditionalTools([]);
+    setDisabledTools([]);
+  }, [selected]);
   const [view, setView] = useState<View>("playground");
   const [input, setInput] = useState(
     "Calculate the total and average of 12, 18, and 24. Save a short report to report.md.",
@@ -104,6 +121,10 @@ function App() {
   const [pane, setPane] = useState<"result" | "events">("events");
   const agent = agents.find((a) => a.slug === selected);
   const running = !!active && !terminal.has(active.status);
+  const effectiveTools = [
+    ...(agent?.config.tools || []).filter((t) => !disabledTools.includes(t.id)),
+    ...additionalTools,
+  ];
 
   async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
     const response = await fetch(path, {
@@ -128,12 +149,14 @@ function App() {
 
   async function refresh() {
     try {
-      const [a, s, r] = await Promise.all([
+      const [a, s, r, t] = await Promise.all([
         api<Agent[]>("/v1/agents"),
         api<Settings>("/v1/settings"),
         api<Run[]>("/v1/runs"),
+        api<ToolRecord[]>("/v1/tools"),
       ]);
       setAgents(a);
+      setTools(t);
       setSettings(s);
       setRuns(r);
       setLocked(false);
@@ -351,7 +374,11 @@ function App() {
         `/v1/deployments/${selected}/runs`,
         {
           method: "POST",
-          body: JSON.stringify({ input }),
+          body: JSON.stringify({
+            input,
+            additional_tools: additionalTools,
+            disabled_tools: disabledTools,
+          }),
           headers: { "Idempotency-Key": crypto.randomUUID() },
         },
       );
@@ -378,6 +405,7 @@ function App() {
       setActive(await api<Run>(`/v1/runs/${run.id}`));
       setView("playground");
       setSelected(run.agent_slug);
+      setInput(run.input);
       setPane(run.output ? "result" : "events");
     } catch (e) {
       setError((e as Error).message);
@@ -473,6 +501,13 @@ function App() {
             <span className="count">{runs.length}</span>
           </button>
           <button
+            className={view === "tools" ? "selected" : ""}
+            onClick={() => setView("tools")}
+          >
+            <Code2 size={18} /> Tools{" "}
+            <span className="count">{tools.length}</span>
+          </button>
+          <button
             className={view === "settings" ? "selected" : ""}
             onClick={() => setView("settings")}
           >
@@ -508,12 +543,24 @@ function App() {
                 ? "Agents"
                 : view === "runs"
                   ? "Run history"
-                  : "Settings"}
+                  : view === "tools"
+                    ? "Tools"
+                    : "Settings"}
             </strong>
           </span>
           <span className="local-badge">LOCAL</span>
         </header>
         <div className="content">
+          {view === "tools" && (
+            <ToolsView
+              tools={tools}
+              api={api}
+              refresh={refresh}
+              onRun={async (id) => {
+                await openRun(await api<Run>(`/v1/runs/${id}`));
+              }}
+            />
+          )}
           {error && (
             <div className="error" role="alert">
               <span>{error}</span>
@@ -646,19 +693,89 @@ function App() {
                           placeholder="What should this agent do?"
                         />
                         <div className="tool-label">
-                          ENABLED TOOLS <span>{agent.config.tools.length}</span>
+                          ENABLED TOOLS <span>{effectiveTools.length}</span>
                         </div>
                         <div className="tool-chips">
-                          {agent.config.tools.map((t) => (
-                            <span key={t}>
+                          {effectiveTools.map((t) => (
+                            <span key={refKey(t)}>
                               <Code2 size={13} />
-                              {t}
+                              {refKey(t)}
                             </span>
                           ))}
-                          {!agent.config.tools.length && (
+                          {!effectiveTools.length && (
                             <small>No tools enabled</small>
                           )}
                         </div>
+                        <details className="run-tool-picker">
+                          <summary>Tools for this run</summary>
+                          <p className="hint">
+                            Changes here apply only to this invocation.
+                          </p>
+                          {agent.config.tools.map((ref) => (
+                            <label className="checkbox" key={refKey(ref)}>
+                              <input
+                                type="checkbox"
+                                checked={!disabledTools.includes(ref.id)}
+                                onChange={(e) => {
+                                  setDisabledTools(
+                                    e.target.checked
+                                      ? disabledTools.filter(
+                                          (id) => id !== ref.id,
+                                        )
+                                      : [...disabledTools, ref.id],
+                                  );
+                                  setAdditionalTools(
+                                    additionalTools.filter(
+                                      (t) => t.id !== ref.id,
+                                    ),
+                                  );
+                                }}
+                              />
+                              {refKey(ref)} · inherited
+                            </label>
+                          ))}
+                          {tools
+                            .filter(
+                              (t) =>
+                                t.status === "published" &&
+                                !agent.config.tools.some(
+                                  (r) =>
+                                    r.id === t.tool_id &&
+                                    !disabledTools.includes(r.id),
+                                ),
+                            )
+                            .map((t) => (
+                              <label
+                                className="checkbox"
+                                key={`${t.tool_id}@${t.version}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={additionalTools.some(
+                                    (r) =>
+                                      r.id === t.tool_id &&
+                                      r.version === t.version,
+                                  )}
+                                  onChange={(e) =>
+                                    setAdditionalTools([
+                                      ...additionalTools.filter(
+                                        (r) => r.id !== t.tool_id,
+                                      ),
+                                      ...(e.target.checked
+                                        ? [
+                                            {
+                                              id: t.tool_id,
+                                              version: t.version,
+                                            },
+                                          ]
+                                        : []),
+                                    ])
+                                  }
+                                />
+                                {t.tool_id}@{t.version} · additional
+                              </label>
+                            ))}
+                        </details>
                         <div className="limits">
                           <span>
                             Up to {agent.config.max_steps} model calls
@@ -777,6 +894,15 @@ function App() {
                               </div>
                             ) : (
                               <>
+                                {active.resolved_tools?.length ? (
+                                  <div className="tool-chips snapshot-tools">
+                                    {active.resolved_tools.map((t) => (
+                                      <span key={t.id} title={t.sha256}>
+                                        {t.id}@{t.version}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
                                 <pre className="answer">
                                   {active.output ||
                                     active.error ||
@@ -1107,26 +1233,39 @@ function App() {
                 </div>
                 <fieldset>
                   <legend>Tools</legend>
-                  {["python", "write_file", "read_file"].map((t) => (
-                    <label className="checkbox" key={t}>
-                      <input
-                        type="checkbox"
-                        checked={editor.config.tools.includes(t)}
-                        onChange={(e) =>
-                          setEditor({
-                            ...editor,
-                            config: {
-                              ...editor.config,
-                              tools: e.target.checked
-                                ? [...editor.config.tools, t]
-                                : editor.config.tools.filter((v) => v !== t),
-                            },
-                          })
-                        }
-                      />
-                      {t}
-                    </label>
-                  ))}
+                  {tools
+                    .filter((t) => t.status === "published")
+                    .map((t) => (
+                      <label
+                        className="checkbox"
+                        key={`${t.tool_id}@${t.version}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={editor.config.tools.some(
+                            (r) =>
+                              r.id === t.tool_id && r.version === t.version,
+                          )}
+                          onChange={(e) =>
+                            setEditor({
+                              ...editor,
+                              config: {
+                                ...editor.config,
+                                tools: [
+                                  ...editor.config.tools.filter(
+                                    (r) => r.id !== t.tool_id,
+                                  ),
+                                  ...(e.target.checked
+                                    ? [{ id: t.tool_id, version: t.version }]
+                                    : []),
+                                ],
+                              },
+                            })
+                          }
+                        />
+                        {t.tool_id}@{t.version}
+                      </label>
+                    ))}
                 </fieldset>
                 <div className="form-row">
                   <div>

@@ -58,17 +58,39 @@ def initialize():
             id text PRIMARY KEY, run_id text NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
             name text NOT NULL, content text NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS tool_versions (
+            tool_id text NOT NULL, version text NOT NULL, name text NOT NULL,
+            package jsonb NOT NULL, sha256 text NOT NULL, status text NOT NULL,
+            origin text NOT NULL, test_run_id text REFERENCES runs(id) ON DELETE SET NULL,
+            created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(tool_id,version)
+        );
         CREATE TABLE IF NOT EXISTS worker_status (
             id integer PRIMARY KEY, heartbeat timestamptz NOT NULL
         );
         """)
+        from agentberth import registry
+
+        registry.bundled(conn)
+        # Upgrade legacy agent tool names to explicit immutable builtin references.
+        from runtime.packages import reference
+
+        for old in conn.execute("SELECT slug,config FROM agents").fetchall():
+            if any(isinstance(ref, str) for ref in old["config"]["tools"]):
+                old["config"]["tools"] = [reference(ref) for ref in old["config"]["tools"]]
+                conn.execute("UPDATE agents SET config=%s WHERE slug=%s", (Jsonb(old["config"]), old["slug"]))
+        for old in conn.execute(
+            "SELECT id,spec FROM runs WHERE status='queued' AND NOT spec ? 'tool_packages'"
+        ).fetchall():
+            old["spec"]["tool_packages"] = registry.resolve(conn, old["spec"]["tools"])
+            old["spec"]["tools"] = [p["manifest"]["name"] for p in old["spec"]["tool_packages"]]
+            conn.execute("UPDATE runs SET spec=%s WHERE id=%s", (Jsonb(old["spec"]), old["id"]))
         demo = {
             "name": "Harbor guide",
             "instructions": "Help the user. Use tools when useful. "
             "Save requested deliverables to files in the workspace.",
             "provider": "demo",
             "model": "",
-            "tools": ["python", "write_file", "read_file"],
+            "tools": [reference(n) for n in ["python", "write_file", "read_file"]],
             "max_steps": 6,
             "timeout_seconds": 120,
         }

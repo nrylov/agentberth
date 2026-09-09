@@ -10,7 +10,7 @@
 | Worker | Claim queued work, launch and monitor containers, terminate and clean up | Database credentials and Docker socket |
 | Runtime | Agent loop and local tools | Run-scoped bearer token and temporary workspace |
 
-The runtime uses only Python's standard library. The API and worker share a locked platform image but have separate environments and network attachments. A one-shot `runtime-image` Compose service makes sure the runtime image is built during the quick start. Its successful exit is expected.
+The runtime uses Python plus a locked JSON Schema validator; custom handlers target the standard library. The API and worker share a locked platform image but have separate environments and network attachments. A one-shot `runtime-image` Compose service makes sure the runtime image is built during the quick start. Its successful exit is expected.
 
 ## Run lifecycle
 
@@ -62,3 +62,12 @@ This is not a distributed lease scheduler. PostgreSQL failure or failed Docker t
 The current worker uses Docker-specific startup orphan reconciliation. Adding a backend requires a corresponding reconciliation implementation as well as the four lifecycle operations. The interface is an extension point, not a claim that backends can already be selected by configuration.
 
 See the [Kubernetes/microVM roadmap](roadmap.md) for runtime classes, packaging, and acceptance criteria.
+
+
+## Tool package storage
+
+Bundled folders are discovered at API startup and registered transactionally in `tool_versions`. Imported drafts and published packages persist as JSONB, including source and fixtures. Registration parses source syntax without importing it. Versions are immutable; the hash covers the complete package.
+
+New runs embed their resolved package contents and hashes in `spec.tool_packages`; registry publication cannot change an accepted run. The gateway uses snapshot schemas and runtime invocations execute snapshot handlers in child processes inside the container. No package source is executed by the API or worker. Fixture runs use the same queue, container backend, events, deadlines, and cleanup behavior with `spec.tool_test` enabled and no model calls.
+
+The registry table is created additively under the existing startup schema lock. Existing agent defaults and queued runs are upgraded transactionally; historical terminal runs are left unchanged. A general schema migration framework is still future work.

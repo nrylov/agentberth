@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Write file",
+    "arguments": {
+      "path": "hello.txt",
+      "content": "hello"
+    },
+    "expected": {
+      "path": "hello.txt",
+      "bytes": 5
+    },
+    "files": {}
+  }
+]

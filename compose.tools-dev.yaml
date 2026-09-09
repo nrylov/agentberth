@@ -1,0 +1,5 @@
+# Optional local authoring override. Run with both Compose files (see docs/tools.md).
+services:
+  api:
+    volumes:
+      - ./tools/builtin:/app/tools/builtin:ro

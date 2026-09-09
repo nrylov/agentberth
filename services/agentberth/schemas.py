@@ -2,9 +2,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from runtime.packages import reference
 
-ToolName = Literal["python", "read_file", "write_file"]
+
+class ToolRef(BaseModel):
+    id: str = Field(pattern=r"^[a-z][a-z0-9-]{1,47}$")
+    version: str = Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 
 
 class AgentConfig(BaseModel):
@@ -12,7 +16,18 @@ class AgentConfig(BaseModel):
     instructions: str = Field(min_length=1, max_length=12000)
     provider: Literal["demo", "openrouter"] = "demo"
     model: str = Field(default="", max_length=150)
-    tools: list[ToolName] = Field(default_factory=lambda: ["python", "write_file", "read_file"], max_length=3)
+    tools: list[ToolRef] = Field(
+        default_factory=lambda: [ToolRef(**reference(n)) for n in ["python", "write_file", "read_file"]],
+        max_length=12,
+    )
+
+    @field_validator("tools", mode="before")
+    @classmethod
+    def legacy_tools(cls, values):
+        if not isinstance(values, list):
+            raise ValueError("Tools must be an array of explicit version references.")
+        return [reference(v) for v in values]
+
     max_steps: int = Field(default=6, ge=1, le=12)
     timeout_seconds: int = Field(default=120, ge=10, le=300)
 
@@ -23,6 +38,8 @@ class CreateAgent(AgentConfig):
 
 class RunInput(BaseModel):
     input: str = Field(min_length=1, max_length=8000)
+    additional_tools: list[ToolRef] = Field(default_factory=list, max_length=12)
+    disabled_tools: list[str] = Field(default_factory=list, max_length=12)
 
 
 class RuntimeEvent(BaseModel):
@@ -84,6 +101,7 @@ class ArtifactMetadata(BaseModel):
 
 class RunDetail(RunSummary):
     artifacts: list[ArtifactMetadata]
+    resolved_tools: list[dict] = Field(default_factory=list)
 
 
 class ProviderStatus(BaseModel):

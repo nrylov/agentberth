@@ -8,7 +8,8 @@ services/agentberth/api.py    FastAPI control plane and model gateway
 services/agentberth/db.py     Schema, persistence, terminal transitions
 services/agentberth/worker.py Single-worker queue and recovery
 services/agentberth/backends/ Execution contract and Docker backend
-runtime/                     Standard-library agent loop and tools
+runtime/                     Agent loop, schema validation, sandbox tool runner
+tools/                       Bundled packages and shareable examples
 scripts/                     End-to-end checks
 tests/                       Unit tests
 docs/                        Architecture, API, security, roadmap
@@ -57,6 +58,8 @@ Commit both files. The frontend uses `package-lock.json` and `npm ci`; run `npm 
 python3 scripts/smoke.py
 python3 scripts/smoke.py --live  # requires credits; optional
 python3 scripts/resilience.py   # pauses test sandboxes and restarts the worker
+python3 scripts/smoke_tools.py  # registry, fixtures, snapshots, per-run selection
+python3 scripts/smoke_tools.py --live  # optional paid custom-tool integration
 ```
 
 For a custom administration key, set `AGENTBERTH_ADMIN_KEY` in the script environment. The scripts do not parse `.env` or print credentials. Pass `--base-url http://localhost:PORT` if needed. Test fixtures remain in run history so you can inspect them.
@@ -105,3 +108,12 @@ Only up to eight UTF-8 text files with safe filenames and sizes of at most 64 KB
 ## Browser integration
 
 Browsers that expose the experimental `document.modelContext` interface can discover two optional tools: `agentberth_list_agents` and `agentberth_prepare_run`. Preparing a task changes the visible playground without executing it or spending credits. Both use the current console authentication. Unsupported browsers continue normally. The initial local validation covers compilation and the HTTP/SSE contracts; it does not claim browser interaction or WebMCP runtime verification.
+
+
+## Runtime validator lock
+
+`runtime/requirements.lock` pins the `jsonschema` dependency closure from `uv.lock` for the sandbox image. When updating the validator, regenerate both platform and runtime lock exports, then rebuild both images and run the tool integration checks. Tool handlers target the standard library; package dependency installation is not supported.
+
+## Tool registry development
+
+See [Tool Package v1](tools.md) for the format, immutable version rules, authoring UI, and CLI. `compose.tools-dev.yaml` optionally mounts repository defaults read-only for explicit reloads. Source changes at an existing ID/version are conflicts; bump the version before reloading. Imported packages persist across image rebuilds and restarts.

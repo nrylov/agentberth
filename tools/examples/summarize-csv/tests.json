@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Two rows",
+    "arguments": {
+      "path": "sample.csv"
+    },
+    "expected": {
+      "row_count": 2,
+      "columns": [
+        "name",
+        "score"
+      ]
+    },
+    "files": {
+      "sample.csv": "name,score\nAda,10\nLin,20\n"
+    }
+  }
+]

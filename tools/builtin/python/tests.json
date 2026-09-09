@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Calculation",
+    "arguments": {
+      "code": "print(7 * 8)"
+    },
+    "expected": {
+      "exit_code": 0,
+      "output": "56\n"
+    },
+    "files": {}
+  }
+]

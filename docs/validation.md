@@ -23,3 +23,17 @@ Initial validation: 2026-09-09, macOS host, Docker Linux ARM64 engine, Compose 5
 The real model test used `google/gemini-3.8-flash`; future availability and behavior are not guaranteed. Tests can be repeated with the scripts in `scripts/`. Fault-injection tests are for development environments only.
 
 The GitHub Actions workflow is included but has not been run on GitHub as part of this local implementation. Browser interaction/accessibility automation, optional WebMCP runtime behavior, Kubernetes, microVMs, multi-tenancy, and production hardening have not been validated. The Python test run emitted upstream TestClient/AnyIO deprecation warnings; these did not fail the tests.
+
+## Tool registry milestone
+
+Validated locally after the initial preview:
+
+- 21 Python unit/contract tests passed, including package parsing without source execution, schema/path rejection, hash tampering, custom handler execution, result validation, timeouts, and fixture error handling.
+- Frontend TypeScript/Vite build and formatting passed.
+- The existing PostgreSQL volume upgraded without resetting agents, runs, or provider configuration.
+- Package import/export, draft isolation, sandbox fixtures, publication, immutable version conflicts, per-run additions/disabling, snapshot hashes, failed-test rejection, and override-aware idempotency passed integration checks.
+- A real OpenRouter run used an added CSV tool while Python was disabled for that run: three model calls, provider-reported cost $0.001515.
+- Existing demo, authentication, event replay, cancellation, timeout, and worker recovery checks passed after the package migration.
+- The `summarize-csv@1.0.0` example was imported, tested, and published in the local workspace.
+
+The registry/UI changes have not undergone browser interaction automation. LLM-assisted generation, arbitrary package dependencies, and remote tools remain future work. The GitHub Actions workflow now includes the key-free tool integration suite but has not been executed on GitHub here.

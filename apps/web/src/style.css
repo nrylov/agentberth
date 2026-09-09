@@ -1147,3 +1147,104 @@ legend {
     animation: none;
   }
 }
+.tool-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.import-button {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+  margin: 0;
+}
+.import-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.import-button:focus-within {
+  outline: 3px solid #50aa98;
+  outline-offset: 3px;
+}
+.library-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 0.7fr) minmax(350px, 1.5fr);
+  gap: 22px;
+  align-items: start;
+}
+.tool-library-list {
+  padding: 8px;
+}
+.tool-library-list > button {
+  width: 100%;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 14px 10px;
+  background: white;
+  color: #567363;
+  border-radius: 6px;
+}
+.tool-library-list > button.active {
+  background: #edf5f0;
+}
+.tool-library-list > button > span:first-of-type {
+  flex: 1;
+}
+.tool-library-list strong {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+.tool-library-list small {
+  display: block;
+  color: #809286;
+}
+.tool-editor label {
+  margin-top: 20px;
+}
+.tool-editor .source-input {
+  font-family: monospace;
+  font-size: 0.875rem;
+  tab-size: 4;
+}
+.tool-editor .hint {
+  margin-top: 0;
+  overflow-wrap: anywhere;
+}
+.tool-editor .modal-footer {
+  flex-wrap: wrap;
+}
+.run-tool-picker {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.run-tool-picker summary {
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: #486a56;
+}
+.run-tool-picker .checkbox {
+  display: flex;
+  font-family: inherit;
+  margin-top: 12px;
+}
+.snapshot-tools {
+  margin-bottom: 15px;
+}
+@media (max-width: 1000px) {
+  .library-layout {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  nav {
+    flex-wrap: wrap;
+  }
+  nav button {
+    flex-basis: 40%;
+  }
+}

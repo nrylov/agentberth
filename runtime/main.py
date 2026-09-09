@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import time
+import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -24,22 +25,44 @@ def event(kind, data):
     request("/events", {"kind": kind, "data": data})
 
 
-def tool(name, args, allowed):
-    event("tool.started", {"name": name, "arguments": args})
+def preview(data):
+    text = json.dumps(data)
+    return data if len(text) < 12000 else {"preview": text[:10000], "truncated": True}
+
+
+def tool(name, args, allowed, fail_on_error=False):
+    package = next((p for p in allowed if p["manifest"]["name"] == name), None)
+    event(
+        "tool.started",
+        {
+            "name": name,
+            "arguments": preview(args),
+            "tool": {
+                "id": package["manifest"]["id"],
+                "version": package["manifest"]["version"],
+                "sha256": package["sha256"],
+            }
+            if package
+            else None,
+        },
+    )
     try:
         output = execute(name, args, allowed)
     except Exception as exc:
+        if fail_on_error:
+            raise
         output = {"error": str(exc)[:1000]}
-    event("tool.completed", {"name": name, "result": output})
+    event("tool.completed", {"name": name, "result": preview(output)})
     return output
 
 
 def demo(context):
     event("agent.message", {"text": "Demo mode: running a fixed example without contacting an LLM."})
     time.sleep(1)
-    allowed = context["spec"]["tools"]
+    allowed = context["spec"]["tool_packages"]
+    names = context["spec"]["tools"]
     result = {"output": "Tool execution is disabled."}
-    if "python" in allowed:
+    if "python" in names:
         result = tool(
             "python",
             {
@@ -49,11 +72,11 @@ def demo(context):
         )
     text = "# Agentberth demo report\n\nThis is a deterministic demo, not a model-generated answer.\n\n"
     text += "Your input: " + context["input"] + "\n\nExample calculation:\n" + result.get("output", "")
-    if "write_file" in allowed:
+    if "write_file" in names:
         tool("write_file", {"path": "report.md", "content": text}, allowed)
     return (
         "Demo complete. The example calculated a total of 54 and an average of 18."
-        if "python" in allowed
+        if "python" in names
         else "Demo complete. Enable Python to run the example calculation."
     )
 
@@ -84,7 +107,7 @@ def agent(context):
                 args = json.loads(function["arguments"])
                 if not isinstance(args, dict):
                     raise ValueError("Tool arguments must be an object.")
-                output = tool(function["name"], args, spec["tools"])
+                output = tool(function["name"], args, spec["tool_packages"])
             except (ValueError, KeyError):
                 output = {"error": "Invalid tool call arguments."}
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(output)})
@@ -116,10 +139,38 @@ def artifacts():
     return items
 
 
+def test_package(context):
+    from runtime import tools
+
+    package = context["spec"]["tool_packages"][0]
+    original = tools.WORKSPACE
+    try:
+        for fixture in package["tests"]:
+            with tempfile.TemporaryDirectory(dir=original, prefix="fixture-") as directory:
+                tools.WORKSPACE = Path(directory)
+                for path, content in fixture["files"].items():
+                    target = Path(directory) / path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_text(content)
+                event("agent.message", {"text": "Testing: " + fixture["name"]})
+                result = tool(
+                    package["manifest"]["name"], fixture["arguments"], [package], fail_on_error=True
+                )
+                if result != fixture["expected"]:
+                    raise ValueError("Fixture failed: " + fixture["name"] + ". Inspect the tool result.")
+        return f"All {len(package['tests'])} fixtures passed for {package['manifest']['id']}@{package['manifest']['version']}."
+    finally:
+        tools.WORKSPACE = original
+
+
 def main():
     try:
         context = request("/context")
-        output = demo(context) if context["spec"]["provider"] == "demo" else agent(context)
+        output = (
+            test_package(context)
+            if context["spec"].get("tool_test")
+            else (demo(context) if context["spec"]["provider"] == "demo" else agent(context))
+        )
         request("/result", {"output": output, "artifacts": artifacts()})
     except Exception as exc:
         if isinstance(exc, urllib.error.HTTPError):

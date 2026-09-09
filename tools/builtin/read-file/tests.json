@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Read fixture",
+    "arguments": {
+      "path": "hello.txt"
+    },
+    "expected": {
+      "content": "hello"
+    },
+    "files": {
+      "hello.txt": "hello"
+    }
+  }
+]
