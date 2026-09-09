@@ -1,0 +1,7 @@
+images:
+  platform: agentberth-platform:local
+  runtime: agentberth-runtime:local
+  pullPolicy: IfNotPresent
+postgres:
+  storageClass: standard
+  storageSize: 1Gi

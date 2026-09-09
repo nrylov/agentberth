@@ -5,7 +5,7 @@
 | Mode | Status | Notes |
 |---|---|---|
 | Docker Compose + Docker execution | Implemented local preview | Tested locally on macOS with Linux ARM64 containers; CI workflow targets Linux |
-| Kubernetes platform + Job execution | Planned | No Helm chart or Kubernetes backend is shipped yet |
+| Kubernetes platform + Job execution | Implemented preview | Helm chart and backend included; see validation for tested distributions |
 | Kubernetes with VM-backed RuntimeClass | Planned | Requires a supported VM runtime installed on compatible nodes |
 | Direct Firecracker | Deferred | Requires Linux/KVM and a separate host lifecycle implementation |
 
@@ -21,9 +21,9 @@
 
 Repository packages (`tool.json`, `handler.py`, `tests.json`), persistent immutable versions, sandbox fixtures, publication, import/export, agent defaults, and per-run overrides are implemented. Runtime tests use the same container lifecycle and do not call an LLM. LLM-assisted draft generation remains planned and will produce this format.
 
-## Milestone 2: Kubernetes as a first-class backend
+## Milestone 2: Kubernetes as a first-class backend (implemented preview)
 
-Implement a `KubernetesBackend` that creates one Job per run. The portable runtime should retain the same callback/context/model protocol. Add configuration for image, namespace, service account, node placement, and optional runtime class.
+The `KubernetesBackend` creates one Job per run. See [deployment guide](kubernetes.md) for shipped configuration and limitations. The portable runtime should retain the same callback/context/model protocol. Add configuration for image, namespace, service account, node placement, and optional runtime class.
 
 Package API, worker, database connection configuration, and network policy in a Helm chart. Use namespace-scoped RBAC for Job lifecycle and required Pod status/log access. Avoid cluster-admin. Separate the control-plane worker service account from sandbox workloads; disable automatic service account token mounting in sandbox Pods. Define seccomp, non-root execution, resource limits, read-only roots, and bounded `emptyDir` workspaces.
 

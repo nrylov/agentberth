@@ -76,6 +76,7 @@ type RunEvent = {
   created_at: string;
 };
 type Settings = {
+  backend: "docker" | "kubernetes";
   provider: { configured: boolean; base_url: string; model: string };
   worker_online: boolean;
   demo_key: boolean;
@@ -146,6 +147,7 @@ function App() {
   const [copied, setCopied] = useState(false);
   const [pane, setPane] = useState<"result" | "events">("events");
   const agent = agents.find((a) => a.slug === selected);
+  const kubernetes = settings?.backend === "kubernetes";
   const running = !!active && !terminal.has(active.status);
   const effectiveTools = [
     ...(agent?.config.tools || []).filter((t) => !disabledTools.includes(t.id)),
@@ -509,13 +511,17 @@ function App() {
             <Anchor size={23} />
           </span>
           <span>
-            agentberth<span className="version">LOCAL CONSOLE / 0.1</span>
+            agentberth
+            <span className="version">
+              {kubernetes ? "CLUSTER CONSOLE / 0.1" : "LOCAL CONSOLE / 0.1"}
+            </span>
           </span>
         </a>
         <div className="workspace-label">
           <span className="workspace-avatar">A</span>
           <div>
-            Local workspace<small>Personal development</small>
+            {kubernetes ? "Cluster workspace" : "Local workspace"}
+            <small>Personal development</small>
           </div>
         </div>
         <p className="nav-label">WORKSPACE</p>
@@ -552,7 +558,7 @@ function App() {
           <div className="engine">
             <Box size={17} />
             <span>
-              Docker engine
+              {kubernetes ? "Kubernetes cluster" : "Docker engine"}
               <small>
                 {settings?.worker_online
                   ? "Worker connected"
@@ -599,7 +605,7 @@ function App() {
                 <span className="theme-thumb" />
               </span>
             </button>
-            <span className="local-badge">LOCAL</span>
+            <span className="local-badge">{kubernetes ? "K8S" : "LOCAL"}</span>
           </div>
         </header>
         <div className="content">
@@ -862,8 +868,10 @@ function App() {
                         </button>
                       </div>
                       <div className="panel-foot">
-                        <Layers size={14} /> A fresh container and workspace for
-                        every run
+                        <Layers size={14} />{" "}
+                        {kubernetes
+                          ? "A fresh Kubernetes Job and workspace for every run"
+                          : "A fresh container and workspace for every run"}
                       </div>
                     </section>
                     <section className="output-panel panel">
@@ -1049,7 +1057,8 @@ function App() {
                   service.
                 </span>
                 <span>
-                  Docker backend <ArrowUpRight size={14} />
+                  {kubernetes ? "Kubernetes backend" : "Docker backend"}{" "}
+                  <ArrowUpRight size={14} />
                 </span>
               </div>
             </>
@@ -1134,7 +1143,9 @@ function App() {
                   <p className="eyebrow">WORKSPACE CONFIGURATION</p>
                   <h1>Connections & execution</h1>
                   <p>
-                    Local settings are managed in your repository’s .env file.
+                    {kubernetes
+                      ? "Settings are managed through your Helm values and Kubernetes Secret."
+                      : "Local settings are managed in your repository’s .env file."}
                   </p>
                 </div>
               </div>
@@ -1161,12 +1172,12 @@ function App() {
                     <p>
                       {settings?.provider.configured
                         ? "Saved in the API environment. Never returned to the browser."
-                        : "Add LLM_API_KEY to .env to enable real model calls."}
+                        : "Configure LLM_API_KEY in the API environment to enable real model calls."}
                     </p>
                     <p className="hint">
-                      After changing .env, run <code>docker compose up -d</code>{" "}
-                      to recreate services with the new values. Choose
-                      OpenRouter when configuring an agent.
+                      {kubernetes
+                        ? "After changing the Secret, restart the API Deployment. Choose OpenRouter when configuring an agent."
+                        : "After changing .env, run docker compose up -d to recreate services. Choose OpenRouter when configuring an agent."}
                     </p>
                   </div>
                 </section>
@@ -1178,7 +1189,11 @@ function App() {
                   </div>
                   <div className="panel-body settings-body">
                     <label>Backend</label>
-                    <p>Docker · one container per run</p>
+                    <p>
+                      {kubernetes
+                        ? "Kubernetes · one Job per run"
+                        : "Docker · one container per run"}
+                    </p>
                     <label>Sandbox resources</label>
                     <p>1 CPU · 256 MB RAM · 64 MB workspace</p>
                     <label>Network</label>
@@ -1187,7 +1202,7 @@ function App() {
                     <p>
                       {settings?.worker_online
                         ? "Connected and accepting work"
-                        : "Offline — check docker compose logs worker"}
+                        : "Offline — check worker logs"}
                     </p>
                     <label>Administration</label>
                     <p>
@@ -1447,8 +1462,9 @@ function App() {
             <Anchor size={30} />
             <h2>Connect to Agentberth</h2>
             <p>
-              Enter the AGENTBERTH_ADMIN_KEY from your .env file. The local demo
-              default is agentberth-local.
+              Enter this deployment’s administration key. Kubernetes setup saves
+              it to your chosen key file; the local Docker demo default is
+              agentberth-local.
             </p>
             <label htmlFor="admin-key">Administration API key</label>
             <input

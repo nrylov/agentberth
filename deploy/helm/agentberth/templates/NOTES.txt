@@ -1,0 +1,10 @@
+Agentberth uses a separate database and sandbox namespace from your Docker installation.
+
+Connect:
+  kubectl --context YOUR_CONTEXT -n {{ .Release.Namespace }} port-forward svc/{{ include "agentberth.name" . }}-api 8081:8080
+
+Open http://localhost:8081 and enter the ADMIN_KEY from your existing Secret.
+Check the worker is online before starting a run. Do not run untrusted tools until
+network isolation checks in docs/kubernetes.md pass on this cluster.
+
+PostgreSQL PVCs and the sandbox namespace are retained on uninstall.

@@ -1,0 +1,65 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agentberth.name" . }}-postgres
+spec:
+  clusterIP: None
+  selector: {app: {{ include "agentberth.name" . }}-postgres}
+  ports: [{name: postgres, port: 5432}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "agentberth.name" . }}-postgres
+spec:
+  serviceName: {{ include "agentberth.name" . }}-postgres
+  replicas: 1
+  selector:
+    matchLabels: {app: {{ include "agentberth.name" . }}-postgres}
+  template:
+    metadata:
+      labels: {app: {{ include "agentberth.name" . }}-postgres}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: postgres
+          image: {{ .Values.images.postgres | quote }}
+          securityContext:
+            {{- include "agentberth.containerSecurity" . | nindent 12 }}
+          env:
+            - {name: POSTGRES_USER, value: agentberth}
+            - {name: POSTGRES_DB, value: agentberth}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: {{ .Values.existingSecret }}, key: POSTGRES_PASSWORD}}
+          resources: {{ .Values.postgres.resources | toJson }}
+          ports: [{containerPort: 5432}]
+          readinessProbe:
+            exec: {command: [pg_isready, -U, agentberth]}
+            periodSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+            - {name: tmp, mountPath: /tmp}
+            - {name: socket, mountPath: /var/run/postgresql}
+      volumes:
+        - {name: tmp, emptyDir: {sizeLimit: 16Mi}}
+        - {name: socket, emptyDir: {sizeLimit: 1Mi}}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.postgres.storageClass }}
+        storageClassName: {{ .Values.postgres.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storageSize }}
+{{- end }}

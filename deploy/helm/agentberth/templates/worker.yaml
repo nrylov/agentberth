@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentberth.name" . }}-worker
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: {{ include "agentberth.name" . }}-worker}
+  template:
+    metadata:
+      labels: {app: {{ include "agentberth.name" . }}-worker}
+    spec:
+      serviceAccountName: {{ include "agentberth.name" . }}-worker
+      terminationGracePeriodSeconds: 90
+      securityContext:
+        {{- include "agentberth.security" . | nindent 8 }}
+      imagePullSecrets: {{ .Values.imagePullSecrets | toJson }}
+      containers:
+        - name: worker
+          image: {{ .Values.images.platform | quote }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command: [python, -m, agentberth.worker]
+          securityContext:
+            {{- include "agentberth.containerSecurity" . | nindent 12 }}
+          env:
+            - {name: EXECUTION_BACKEND, value: kubernetes}
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: {{ .Values.existingSecret }}, key: DATABASE_URL}}
+            - {name: KUBERNETES_RUN_NAMESPACE, value: {{ include "agentberth.sandbox" . | quote }}}
+            - {name: KUBERNETES_OWNER, value: {{ include "agentberth.name" . | quote }}}
+            - {name: KUBERNETES_RUN_SERVICE_ACCOUNT, value: agentberth-run}
+            - {name: RUNTIME_IMAGE, value: {{ .Values.images.runtime | quote }}}
+            - {name: RUNTIME_IMAGE_PULL_POLICY, value: {{ .Values.images.pullPolicy | quote }}}
+            - {name: INTERNAL_API_URL, value: {{ printf "http://%s-api.%s.svc:8080" (include "agentberth.name" .) .Release.Namespace | quote }}}
+            - {name: RUN_CPU_REQUEST, value: {{ .Values.runtime.cpuRequest | quote }}}
+            - {name: RUN_CPU_LIMIT, value: {{ .Values.runtime.cpuLimit | quote }}}
+            - {name: KUBERNETES_RUNTIME_CLASS, value: {{ .Values.runtime.runtimeClassName | quote }}}
+            - {name: KUBERNETES_NODE_SELECTOR, value: {{ .Values.runtime.nodeSelector | toJson | quote }}}
+            - {name: KUBERNETES_TOLERATIONS, value: {{ .Values.runtime.tolerations | toJson | quote }}}
+            - {name: KUBERNETES_IMAGE_PULL_SECRETS, value: {{ .Values.imagePullSecrets | toJson | quote }}}
+          resources: {{ .Values.worker.resources | toJson }}
+          readinessProbe:
+            exec:
+              command: [python, -c, "import time; from pathlib import Path; assert time.time()-float(Path('/tmp/agentberth-worker-heartbeat').read_text()) < 90"]
+            timeoutSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {sizeLimit: 16Mi}}]

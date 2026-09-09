@@ -7,7 +7,7 @@
 | React console | Configure agents, submit tasks, inspect results | Administration token in browser session storage after manual login |
 | FastAPI service | Authentication, run acceptance, provider gateway, events/artifacts, static UI | Database credentials and provider API key |
 | PostgreSQL | Durable agents, runs, event sequence, binary/text artifacts, temporary run inputs, worker heartbeat | Internal database network only |
-| Worker | Claim queued work, launch and monitor containers, terminate and clean up | Database credentials and Docker socket |
+| Worker | Claim queued work, launch and monitor containers, terminate and clean up | Database credentials; Docker socket locally or sandbox namespace RBAC on Kubernetes |
 | Runtime | Agent loop and local tools | Run-scoped bearer token and temporary workspace |
 
 The runtime uses Python plus a locked JSON Schema validator; custom handlers target the standard library. The API and worker share a locked platform image but have separate environments and network attachments. A one-shot `runtime-image` Compose service makes sure the runtime image is built during the quick start. Its successful exit is expected.
@@ -42,13 +42,13 @@ Schema setup is additive `CREATE TABLE IF NOT EXISTS` under an advisory lock. Be
 
 ## Scheduling and failure semantics
 
-One worker owns a database advisory lock. A second worker exits instead of concurrently reconciling the same Docker resources. The worker reports a heartbeat every scheduling/monitor cycle.
+One worker owns a database advisory lock. A second worker exits instead of concurrently reconciling the same backend resources. The worker reports a heartbeat every scheduling/monitor cycle.
 
 On restart, the worker first removes Agentberth-labelled orphan containers, then marks previously running jobs failed. Queued runs remain queued and can execute. Failed/running work is never automatically replayed, because tools may already have produced side effects. Clients choose whether to submit a new invocation.
 
 Idempotency is scoped to the deployment slug. Reusing a key with identical input returns the original run; different input returns HTTP 409. The original run is returned even after an agent configuration changes. The key deduplicates run acceptance, not arbitrary external tool effects.
 
-This is not a distributed lease scheduler. PostgreSQL failure or failed Docker teardown may require the worker to restart before status can be reconciled. Do not horizontally scale the worker or run multiple installations with the same Docker labels/network names yet.
+This is not a distributed lease scheduler. PostgreSQL failure or failed sandbox teardown may require the worker to restart before status can be reconciled. Do not horizontally scale the worker or run multiple installations with the same Docker labels/network names yet.
 
 ## Backend extension point
 
@@ -59,7 +59,7 @@ This is not a distributed lease scheduler. PostgreSQL failure or failed Docker t
 - `cancel`: terminate execution.
 - `cleanup`: remove the environment idempotently.
 
-The current worker uses Docker-specific startup orphan reconciliation. Adding a backend requires a corresponding reconciliation implementation as well as the four lifecycle operations. The interface is an extension point, not a claim that backends can already be selected by configuration.
+The worker selects Docker by default or Kubernetes with `EXECUTION_BACKEND=kubernetes`. Both implement startup orphan reconciliation and the lifecycle operations. Kubernetes runs the worker in-cluster; Jobs use a dedicated sandbox namespace and short-lived token Secrets. See [Kubernetes deployment](kubernetes.md) for Helm configuration and the tested isolation boundaries.
 
 See the [Kubernetes/microVM roadmap](roadmap.md) for runtime classes, packaging, and acceptance criteria.
 

@@ -1,0 +1,3 @@
+postgres:
+  storageClass: microk8s-hostpath
+  storageSize: 5Gi

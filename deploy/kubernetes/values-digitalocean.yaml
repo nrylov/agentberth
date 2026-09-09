@@ -1,0 +1,7 @@
+# Override with your pushed, versioned multi-architecture image references.
+images:
+  platform: registry.digitalocean.com/YOUR_REGISTRY/agentberth-platform:platform-YOUR_TAG
+  runtime: registry.digitalocean.com/YOUR_REGISTRY/agentberth-platform:runtime-YOUR_TAG
+postgres:
+  storageClass: do-block-storage
+  storageSize: 5Gi

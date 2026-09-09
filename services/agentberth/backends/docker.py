@@ -8,6 +8,8 @@ from agentberth.backends import RunSpec
 
 
 class DockerBackend:
+    name = "docker"
+
     def __init__(self):
         self.client = docker.from_env(timeout=10)
 

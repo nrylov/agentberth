@@ -1,0 +1,7 @@
+apiVersion: v2
+name: agentberth
+description: Agentberth API, worker, PostgreSQL and isolated per-run Kubernetes Jobs
+type: application
+version: 0.2.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.30.0-0"

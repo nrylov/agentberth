@@ -133,7 +133,7 @@ Filename, bytes, task, and tool overrides participate in idempotency. Reusing th
 | Combined output ZIP | Download all as ZIP | `/artifacts.zip` / `artifacts_archive_url` |
 | Tool create/import/export/test/publish/delete | Tools | [Tool registry endpoints](api.md#tool-registry) |
 | Provider and worker status | Settings | `GET /v1/settings` |
-| Provider credentials | Managed in `.env` | No credential-writing endpoint |
+| Provider credentials | Managed in `.env` (Compose) or an existing Secret (Kubernetes) | No credential-writing endpoint |
 | Theme preference | Top-bar switch | Browser-only preference |
 
 Repository reload is currently API/CLI-only. The GUI cannot set custom idempotency keys or nested attachment paths. Browser controls call the public API; no separate execution path exists. New workflow features should document their GUI and API equivalents here and add integration coverage where behavior is shared.

@@ -19,6 +19,7 @@ from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 
 from agentberth import db
+from agentberth.backends import backend_name
 from agentberth.schemas import (
     AgentConfig,
     CreateAgent,
@@ -148,7 +149,7 @@ def settings():
         ).fetchone()
     return {
         "provider": {"base_url": BASE_URL, "model": MODEL, "configured": bool(PROVIDER_KEY)},
-        "backend": "docker",
+        "backend": backend_name(),
         "worker_online": bool(worker and worker["online"]),
         "auth_mode": "local-admin",
         "demo_key": ADMIN_KEY == "agentberth-local",
@@ -222,7 +223,9 @@ def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(defau
                 return run_links(previous["id"])
         spec = agent["config"]
         if spec["provider"] == "openrouter" and not PROVIDER_KEY:
-            raise HTTPException(422, "Set LLM_API_KEY in .env and recreate the API service first.")
+            raise HTTPException(
+                422, "Configure LLM_API_KEY in the API environment and restart the API service first."
+            )
         if spec["provider"] == "openrouter" and BASE_URL != "https://openrouter.ai/api/v1":
             raise HTTPException(422, "This release supports the OpenRouter endpoint only.")
         if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:

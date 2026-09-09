@@ -1,6 +1,6 @@
 # Security model
 
-Agentberth v0.1 is for one trusted administrator running a local development stack. It is **not production multi-tenant isolation**, and it has not undergone an independent security audit.
+Agentberth v0.1 is for one trusted administrator running a development/test deployment. It is **not production multi-tenant isolation**, and it has not undergone an independent security audit.
 
 ## Credentials and authentication
 
@@ -48,3 +48,9 @@ Registry import and reload are administration-only actions. Imports never execut
 Publication and tests are functional checks, not a certification of code safety. All tools in one run share the container trust boundary; arbitrary Python may bypass workspace helpers or inspect other same-user processes. Run-only selection does not create per-tool network/credential permissions. Tool test fixtures supplied by an author can be incomplete or misleading, and hostile code may interfere with its own sandbox. Review code and fixtures before publishing.
 
 No arbitrary dependency installation, host-side imports, remote tool fetching, or autonomous LLM publication is implemented. LLM-generated source will eventually enter the same draft workflow.
+
+## Kubernetes privileges and isolation
+
+The Kubernetes worker runs non-root without a Docker socket. A namespace-scoped Role grants Job lifecycle, Pod inspection, and Secret lifecycle permissions in the dedicated sandbox namespace. Agent Pods have a different service account with automatic token mounting disabled, read-only roots, dropped capabilities, non-root UID, and memory-backed workspaces. Pod Security admission is set to restricted in that namespace. The trusted worker can read Secrets in the sandbox namespace, including any registry pull credentials there; provider/database credentials belong in the control namespace.
+
+Sandbox NetworkPolicy restricts runtime egress to the API and DNS, and database policy allows only API/worker ingress. The trusted API and worker retain general egress by default. Verify enforcement with the Kubernetes isolation probe on each distribution. Kubernetes does not provide the Docker backend's per-container PID cap via this chart; node/runtime settings govern that limit. Cluster administrators can inspect running workloads and token Secrets. See [Kubernetes operations and limitations](kubernetes.md).

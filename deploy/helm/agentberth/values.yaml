@@ -1,0 +1,40 @@
+# Create this Secret separately; never commit provider/admin/database credentials.
+existingSecret: agentberth-secrets
+images:
+  platform: agentberth-platform:local
+  runtime: agentberth-runtime:local
+  postgres: postgres:17
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+# Empty derives <release namespace>-sandbox. Dedicated to this installation.
+sandboxNamespace: ""
+llm:
+  baseUrl: https://openrouter.ai/api/v1
+  model: google/gemini-3.8-flash
+api:
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+worker:
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+    limits: {cpu: 250m, memory: 192Mi}
+postgres:
+  enabled: true
+  storageClass: ""
+  storageSize: 5Gi
+  resources:
+    requests: {cpu: 100m, memory: 192Mi}
+    limits: {cpu: 500m, memory: 384Mi}
+runtime:
+  cpuRequest: 100m
+  cpuLimit: "1"
+  runtimeClassName: ""
+  nodeSelector: {}
+  tolerations: []
+networkPolicy:
+  enabled: true
+  # The worker needs Kubernetes API access. Restrict this with the tested
+  # distribution-specific policy (DOKS uses Cilium toEntities: kube-apiserver).
+  workerEgressRestricted: false
+  kubernetesApiCIDRs: []

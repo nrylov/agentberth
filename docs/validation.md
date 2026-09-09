@@ -60,3 +60,17 @@ Validated on 2026-09-09 against the local Docker stack:
 - The file integration suite verified a 1 MiB binary upload through the real sandbox and byte-for-byte output download, automatic archive resolution/extraction, combined output ZIP, authentication, idempotency, and invalid-archive failure.
 - Recovery checks verified input expiry after timeout, cancellation, and worker-restart failure. Completed/failed runs were also covered. A direct database assertion found no terminal run retaining its input payload.
 - Existing demo integration checks and older UTF-8 artifact compatibility passed. The bundled archive fixture and documented `scripts/run_files.py` example passed without model credits.
+
+## Kubernetes backend and Helm chart
+
+Local checks on 2026-09-09: 50 Python tests, Ruff checks, frontend production build, Helm lint, and Kubernetes manifest client validation passed.
+
+- kind v0.33.0 / Kubernetes v1.37.0 on macOS Docker Desktop ARM64: chart installation/upgrade, public demo and binary/archive workflow, sandbox network denial, Job security, cancellation, timeout, worker-restart reconciliation, input expiry, and token Secret cleanup passed.
+- DigitalOcean Kubernetes v1.36.3 on a single AMD64 4 GiB node: registry image pulls, a 5 GiB block-storage PVC, chart deployment/upgrade, public demo and binary/archive workflow, sandbox network denial, Job security, cancellation, timeout, worker-restart reconciliation, input expiry, and token Secret cleanup passed.
+- Published platform/runtime images include AMD64 and ARM64 manifests. The cloud test uses digest-pinned images from one DigitalOcean registry repository with separate tags.
+- Worker readiness uses a local timestamp written after its database heartbeat, avoiding repeated database-driver imports under CPU limits. API/worker use Recreate rollouts.
+- Docker Compose demo and recovery regressions passed after introducing backend selection.
+- A Kubernetes CI workflow is included; its GitHub-hosted execution has not yet been observed. MicroK8s values/instructions are provided but have not been runtime-tested. VM-backed RuntimeClass execution remains unverified.
+- No browser visual verification was performed.
+
+The DigitalOcean OpenRouter/custom-tool integration also passed: 3 model calls, provider-reported cost $0.001305, followed by successful tool-version deletion and historical snapshot checks.

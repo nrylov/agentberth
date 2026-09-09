@@ -148,3 +148,7 @@ The console opens in dark mode by default. Use the sun/moon switch in the top ba
 ### File processing
 
 Attach temporary input files or ZIP/TAR archives to a run in the console or API. Archives are automatically extracted in the sandbox. Download generated text/binary files individually or together as ZIP. [File workflow, runnable examples, and GUI/API parity](docs/files.md) explain limits and input expiry.
+
+### Kubernetes
+
+Deploy the same application independently on Kubernetes using the Helm chart and Job execution backend. Docker Compose remains the laptop default. See [Kubernetes installation, DigitalOcean/kind/MicroK8s examples, tests, and operations](docs/kubernetes.md). The cluster deployment has its own database and run history; use local port 8081 for its port-forward while Compose uses 8080.

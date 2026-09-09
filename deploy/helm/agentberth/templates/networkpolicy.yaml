@@ -1,0 +1,62 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandbox-isolation
+  namespace: {{ include "agentberth.sandbox" . }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: {{ .Release.Namespace }}}
+          podSelector:
+            matchLabels: {app: {{ include "agentberth.name" . }}-api}
+      ports: [{protocol: TCP, port: 8080}]
+    - to:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: kube-system}
+          podSelector:
+            matchLabels: {k8s-app: kube-dns}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentberth.name" . }}-database
+spec:
+  podSelector:
+    matchLabels: {app: {{ include "agentberth.name" . }}-postgres}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {matchLabels: {app: {{ include "agentberth.name" . }}-api}}
+        - podSelector: {matchLabels: {app: {{ include "agentberth.name" . }}-worker}}
+      ports: [{protocol: TCP, port: 5432}]
+  egress: []
+{{- if .Values.networkPolicy.workerEgressRestricted }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "agentberth.name" . }}-worker-egress
+spec:
+  podSelector:
+    matchLabels: {app: {{ include "agentberth.name" . }}-worker}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: {matchLabels: {app: {{ include "agentberth.name" . }}-postgres}}
+      ports: [{protocol: TCP, port: 5432}]
+    - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    {{- range .Values.networkPolicy.kubernetesApiCIDRs }}
+    - to: [{ipBlock: {cidr: {{ . | quote }}}}]
+      ports: [{protocol: TCP, port: 443}, {protocol: TCP, port: 6443}, {protocol: TCP, port: 16443}]
+    {{- end }}
+{{- end }}
+{{- end }}
