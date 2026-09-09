@@ -179,6 +179,10 @@ These scripts create agents and run records for inspection. Additional checks, i
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines. Changes to runtime behavior, configuration, or the API should include corresponding tests and documentation.
 
+## Author
+
+Created by **Nikolai Rylov**.
+
 ## License
 
 Agentberth is licensed under the [Apache License 2.0](LICENSE).
