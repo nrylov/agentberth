@@ -37,3 +37,12 @@ Validated locally after the initial preview:
 - The `summarize-csv@1.0.0` example was imported, tested, and published in the local workspace.
 
 The registry/UI changes have not undergone browser interaction automation. LLM-assisted generation, arbitrary package dependencies, and remote tools remain future work. The GitHub Actions workflow now includes the key-free tool integration suite but has not been executed on GitHub here.
+
+## Tool deletion
+
+Validated on 2026-09-09 against the local Docker stack:
+
+- All 21 Python tests, Ruff checks, and the TypeScript/Vite production build passed.
+- Tool integration checks passed for draft/published deletion, bundled and agent-reference protection, deleted-version visibility and reuse prevention, and preservation of accepted/historical run snapshots.
+- A sandbox test accepted immediately before deletion completed successfully afterward. No LLM calls were required.
+- The tool smoke script now deletes its generated tool versions after successful verification.

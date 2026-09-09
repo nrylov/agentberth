@@ -6,6 +6,7 @@ from agentberth.api import app
 def test_unauthenticated_requests_are_rejected_before_database_access():
     client = TestClient(app)
     assert client.get("/v1/agents").status_code == 401
+    assert client.delete("/v1/tools/example/1.0.0").status_code == 401
     assert client.post("/v1/deployments/harbor-guide/runs", json={"input": "hello"}).status_code == 401
 
 

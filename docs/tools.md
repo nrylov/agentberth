@@ -196,3 +196,15 @@ LLM-assisted draft generation is future work. It will produce this same package 
 Directory names are organizational; identity comes from the manifest. To ship multiple versions, put each in a separate immediate child directory under `tools/builtin` (for example `python-v1` and `python-v2`). Keep the original builtin `1.0.0` compatibility packages available in distributions while the seeded/default configurations reference them. Existing databases retain old versions, but a fresh installation cannot recover versions omitted from its image.
 
 Package snapshots pin source and schemas, not the entire Python/runtime image. Platform/runtime upgrades may affect helper behavior; record deployment versions when comparing results. Fully pinned runtime-image provenance belongs in the deployment/backend follow-up.
+
+## Delete a version
+
+Select an imported version in **Tools**, choose **Delete version**, and confirm. The API and CLI support the same operation:
+
+```bash
+python3 scripts/tools.py delete summarize-csv 1.0.0
+```
+
+`DELETE /v1/tools/{id}/{version}` returns a JSON deletion receipt. Draft and published imported versions can be deleted. If an agent uses the version as a default, deletion returns 409 with the agent slugs; edit those defaults first. Bundled versions are repository-managed and cannot be deleted through this operation.
+
+Deleted versions disappear from the library and cannot be selected, exported, tested, or published. Queued, running, and historical runs retain their complete snapshots, results, and events, including sandbox test runs. Deletion retains a database tombstone and package contents to reserve the immutable ID/version; it is not a storage purge. Re-importing that version returns 409, so use a new version number. Deleting a missing or already deleted version returns 404. There is currently no restore operation.

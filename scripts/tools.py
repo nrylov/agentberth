@@ -17,7 +17,7 @@ p = sub.add_parser("export")
 p.add_argument("id")
 p.add_argument("version")
 p.add_argument("folder", type=Path)
-for command in ("test", "publish"):
+for command in ("test", "publish", "delete"):
     p = sub.add_parser(command)
     p.add_argument("id")
     p.add_argument("version")
@@ -69,6 +69,8 @@ elif args.command == "export":
     print("Exported package to", args.folder)
 elif args.command == "reload":
     print(json.dumps(request("/v1/tools/reload", method="POST"), indent=2))
+elif args.command == "delete":
+    print(json.dumps(request(f"/v1/tools/{args.id}/{args.version}", method="DELETE"), indent=2))
 elif args.command == "publish":
     print(json.dumps(request(f"/v1/tools/{args.id}/{args.version}/publish", method="POST"), indent=2))
 elif args.command == "test":

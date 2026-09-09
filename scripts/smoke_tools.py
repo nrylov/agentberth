@@ -155,3 +155,34 @@ if args.live:
     print(
         f"PASS: OpenRouter used the per-run custom tool; {result['model_calls']} model calls, reported cost ${result['cost']}"
     )
+
+# Deletion keeps accepted runs intact, rejects agent references, and reserves version IDs.
+expect(409, lambda: request("/v1/tools/python/1.0.0", method="DELETE"))
+agent_config = next(a for a in request("/v1/agents") if a["slug"] == agent)["config"]
+original_config = deepcopy(agent_config)
+agent_config["tools"].append({"id": id, "version": "1.0.1"})
+request("/v1/agents/" + agent, agent_config, method="PUT")
+expect(409, lambda: request(f"/v1/tools/{id}/1.0.1", method="DELETE"))
+request("/v1/agents/" + agent, original_config, method="PUT")
+# Delete a draft immediately after its test is accepted, before waiting for completion.
+p3 = deepcopy(p)
+p3["manifest"]["version"] = "3.0.0"
+request("/v1/tools/import", p3)
+pending = request(f"/v1/tools/{id}/3.0.0/test", method="POST")
+request(f"/v1/tools/{id}/3.0.0", method="DELETE")
+assert wait(pending["id"])["status"] == "completed"
+for version in ("1.0.0", "1.0.1", "2.0.0"):
+    assert request(f"/v1/tools/{id}/{version}", method="DELETE")["status"] == "deleted"
+assert not any(t["tool_id"] == id for t in request("/v1/tools"))
+expect(404, lambda: request(f"/v1/tools/{id}/1.0.0", method="DELETE"))
+expect(404, lambda: request(f"/v1/tools/{id}/1.0.0/export"))
+expect(404, lambda: request(f"/v1/tools/{id}/1.0.0/test", method="POST"))
+expect(404, lambda: request(f"/v1/tools/{id}/1.0.0/publish", method="POST"))
+expect(409, lambda: request("/v1/tools/import", p))
+expect(409, lambda: request("/v1/tools/import", changed))
+expect(422, lambda: request(path, body))
+assert request("/v1/runs/" + accepted["id"])["resolved_tools"] == run["resolved_tools"]
+assert request("/v1/runs/" + pending["id"])["resolved_tools"][0]["id"] == id
+print(
+    "PASS: deletion of drafts/published versions, agent/bundled protection, accepted run snapshots, hidden deleted versions, immutable deleted IDs"
+)

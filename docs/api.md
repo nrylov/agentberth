@@ -110,3 +110,7 @@ All routes below require the administration key. The current workspace has one t
 A package envelope contains `manifest`, `handler`, and `tests`. See [Tool Package v1](tools.md) for the complete contract. Conflicting contents at an existing ID/version return 409. Malformed packages and unresolved/draft tool references return 422. Test calls return the same run links as normal invocation, so status, streaming, and cancellation work identically.
 
 Run invocation also accepts optional `additional_tools: [{"id":"summarize-csv","version":"1.0.0"}]` and `disabled_tools: ["python"]`. Disabled entries refer to inherited tool IDs. Duplicate IDs/names are rejected. These selections are included in idempotency checks. Run detail includes `resolved_tools` with IDs, versions, model-facing names, and package hashes. Legacy builtin string names are still accepted in agent configurations for compatibility, but responses use explicit references.
+
+### Delete a tool version
+
+`DELETE /v1/tools/{tool_id}/{version}` requires administration bearer authentication and returns `{ "status": "deleted", "tool_id": "...", "version": "..." }`. Only imported versions without agent-default references can be deleted (409 otherwise). Deleted or missing versions return 404. Existing run snapshots remain intact, and deleted version numbers cannot be reused. See [tool deletion](tools.md#delete-a-version) for the UI and CLI workflow.

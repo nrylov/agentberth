@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Code2, Download, Plus, Play, Upload } from "lucide-react";
+import { Code2, Download, Plus, Play, Upload, Trash2 } from "lucide-react";
 
 export type ToolRef = { id: string; version: string };
 export type ToolRecord = {
@@ -74,11 +74,13 @@ export function ToolsView({
   const [shown, setShown] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const current =
     tools.find(
       (t) => t.tool_id === selected?.tool_id && t.version === selected.version,
     ) || selected;
   function load(p: Package, edit: boolean) {
+    setConfirmDelete(false);
     setManifest(JSON.stringify(p.manifest, null, 2));
     setHandler(p.handler);
     setFixtures(JSON.stringify(p.tests, null, 2));
@@ -231,6 +233,7 @@ export function ToolsView({
                   parts[2] = String(Number(parts[2]) + 1);
                   m.version = parts.join(".");
                   setManifest(JSON.stringify(m, null, 2));
+                  setConfirmDelete(false);
                   setEditing(true);
                 }}
               >
@@ -292,6 +295,42 @@ export function ToolsView({
                   </>
                 )}
               </div>
+              {confirmDelete && current && !editing && (
+                <div className="panel-body" role="alert">
+                  <p>
+                    Delete {current.tool_id}@{current.version}? This removes it
+                    from the library and future selections. Existing runs keep
+                    their snapshots. This version number cannot be reused.
+                  </p>
+                  <div className="tool-actions">
+                    <button
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => setConfirmDelete(false)}
+                    >
+                      Keep version
+                    </button>
+                    <button
+                      className="secondary danger"
+                      disabled={busy}
+                      onClick={() =>
+                        void action(async () => {
+                          await api(
+                            `/v1/tools/${current.tool_id}/${current.version}`,
+                            { method: "DELETE" },
+                          );
+                          setSelected(null);
+                          setShown(false);
+                          setConfirmDelete(false);
+                          await refresh();
+                        })
+                      }
+                    >
+                      Delete permanently from library
+                    </button>
+                  </div>
+                </div>
+              )}
               <div className="modal-footer">
                 {editing ? (
                   <button
@@ -331,6 +370,15 @@ export function ToolsView({
                       >
                         <Play size={15} /> Test in sandbox
                       </button>
+                      {current.origin !== "bundled" && (
+                        <button
+                          className="secondary danger"
+                          disabled={busy}
+                          onClick={() => setConfirmDelete(true)}
+                        >
+                          <Trash2 size={15} /> Delete version
+                        </button>
+                      )}
                       {current.status !== "published" && (
                         <button
                           className="primary"

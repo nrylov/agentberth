@@ -21,6 +21,8 @@ def register(conn, package, origin="imported", published=False):
         "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s", (m["id"], m["version"])
     ).fetchone()
     if existing:
+        if existing["status"] == "deleted":
+            raise Conflict("This tool version was deleted. Use a new version number.")
         if existing["sha256"] != sha:
             raise Conflict(
                 f"{m['id']}@{m['version']} already exists with different contents. Increment the version."

@@ -156,6 +156,7 @@ def create_agent(body: CreateAgent):
     config = body.model_dump(exclude={"slug"})
     try:
         with db.connect() as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(71003)")
             registry.resolve(conn, config["tools"])
             return conn.execute(
                 "INSERT INTO agents(slug,name,config) VALUES (%s,%s,%s) RETURNING *",
@@ -168,6 +169,7 @@ def create_agent(body: CreateAgent):
 @app.put("/v1/agents/{slug}", response_model=AgentRecord, dependencies=[Depends(admin)])
 def update_agent(slug: str, body: AgentConfig):
     with db.connect() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(71003)")
         registry.resolve(conn, body.model_dump()["tools"])
         row = conn.execute(
             "UPDATE agents SET name=%s,config=%s,version=version+1,updated_at=now() "
@@ -418,7 +420,7 @@ def model(run_id: str, body: ModelRequest, authorization: str = Header(default="
 def tools_library():
     with db.connect() as conn:
         return conn.execute(
-            "SELECT t.tool_id,t.version,t.name,t.sha256,t.status,t.origin,t.created_at,t.test_run_id,r.status AS test_status,t.package->'manifest' AS manifest FROM tool_versions t LEFT JOIN runs r ON r.id=t.test_run_id ORDER BY t.tool_id,t.created_at DESC"
+            "SELECT t.tool_id,t.version,t.name,t.sha256,t.status,t.origin,t.created_at,t.test_run_id,r.status AS test_status,t.package->'manifest' AS manifest FROM tool_versions t LEFT JOIN runs r ON r.id=t.test_run_id WHERE t.status!='deleted' ORDER BY t.tool_id,t.created_at DESC"
         ).fetchall()
 
 
@@ -437,11 +439,43 @@ def reload_tools():
         ]
 
 
+@app.delete("/v1/tools/{tool_id}/{version}", dependencies=[Depends(admin)])
+def delete_tool(tool_id: str, version: str):
+    with db.connect() as conn:
+        # Serialize with imports and agent edits so references cannot be added mid-delete.
+        conn.execute("SELECT pg_advisory_xact_lock(71003)")
+        row = conn.execute(
+            "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s FOR UPDATE",
+            (tool_id, version),
+        ).fetchone()
+        if not row or row["status"] == "deleted":
+            raise HTTPException(404, "Tool version not found.")
+        if row["origin"] == "bundled":
+            raise HTTPException(
+                409, "Bundled tools are managed by the repository and cannot be deleted here."
+            )
+        users = conn.execute(
+            "SELECT slug FROM agents WHERE config->'tools' @> %s ORDER BY slug",
+            (Jsonb([{"id": tool_id, "version": version}]),),
+        ).fetchall()
+        if users:
+            raise HTTPException(
+                409, "Remove this version from agent defaults first: " + ", ".join(a["slug"] for a in users)
+            )
+        # Keep a tombstone to preserve immutable version identity. Runs have their own snapshots.
+        conn.execute(
+            "UPDATE tool_versions SET status='deleted' WHERE tool_id=%s AND version=%s",
+            (tool_id, version),
+        )
+        return {"status": "deleted", "tool_id": tool_id, "version": version}
+
+
 @app.get("/v1/tools/{tool_id}/{version}/export", dependencies=[Depends(admin)])
 def export_tool(tool_id: str, version: str):
     with db.connect() as conn:
         row = conn.execute(
-            "SELECT package FROM tool_versions WHERE tool_id=%s AND version=%s", (tool_id, version)
+            "SELECT package FROM tool_versions WHERE tool_id=%s AND version=%s AND status!='deleted'",
+            (tool_id, version),
         ).fetchone()
         if not row:
             raise HTTPException(404, "Tool version not found.")
@@ -458,7 +492,8 @@ def export_tool(tool_id: str, version: str):
 def test_tool(tool_id: str, version: str):
     with db.connect() as conn:
         row = conn.execute(
-            "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s FOR UPDATE", (tool_id, version)
+            "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s AND status!='deleted' FOR UPDATE",
+            (tool_id, version),
         ).fetchone()
         if not row:
             raise HTTPException(404, "Tool version not found.")
@@ -497,7 +532,8 @@ def test_tool(tool_id: str, version: str):
 def publish_tool(tool_id: str, version: str):
     with db.connect() as conn:
         row = conn.execute(
-            "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s FOR UPDATE", (tool_id, version)
+            "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s AND status!='deleted' FOR UPDATE",
+            (tool_id, version),
         ).fetchone()
         if not row:
             raise HTTPException(404, "Tool version not found.")
