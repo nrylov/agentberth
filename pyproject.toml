@@ -1,0 +1,27 @@
+[project]
+name = "agentberth"
+version = "0.1.0"
+description = "Package agents. Bring your model. Deploy an API."
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "psycopg[binary]>=3.2,<4",
+  "httpx>=0.28,<1",
+  "docker>=7.1,<8",
+  "jsonschema>=4.23,<5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B"]
+
+[tool.pytest.ini_options]
+pythonpath = ["services", "."]
+testpaths = ["tests"]

@@ -1,0 +1,84 @@
+name: agentberth
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: agentberth
+      POSTGRES_PASSWORD: local-development-only
+      POSTGRES_DB: agentberth
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [database]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U agentberth"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    image: agentberth-platform:local
+    build:
+      context: .
+      target: platform
+    environment:
+      DATABASE_URL: postgresql://agentberth:local-development-only@postgres/agentberth
+      ADMIN_KEY: ${AGENTBERTH_ADMIN_KEY:-agentberth-local}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-google/gemini-3.8-flash}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    ports:
+      - "127.0.0.1:${AGENTBERTH_PORT:-8080}:8080"
+    networks: [database, sandbox, egress]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # Builds the runtime image as part of the one-command quick start.
+  runtime-image:
+    image: agentberth-runtime:local
+    build:
+      context: .
+      target: runtime
+    entrypoint: [python, -c, "print('Agent runtime image ready')"]
+    network_mode: none
+    restart: "no"
+
+  worker:
+    image: agentberth-platform:local
+    build:
+      context: .
+      target: platform
+    user: "0:0"
+    command: [python, -m, agentberth.worker]
+    environment:
+      DATABASE_URL: postgresql://agentberth:local-development-only@postgres/agentberth
+      RUNTIME_IMAGE: agentberth-runtime:local
+      SANDBOX_NETWORK: agentberth_sandbox
+      INTERNAL_API_URL: http://api:8080
+    volumes:
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks: [database]
+    depends_on:
+      api:
+        condition: service_healthy
+      runtime-image:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+networks:
+  database:
+    internal: true
+  sandbox:
+    name: agentberth_sandbox
+    internal: true
+  egress: {}
+volumes:
+  postgres-data: {}
