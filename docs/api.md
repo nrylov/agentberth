@@ -120,3 +120,7 @@ Run invocation also accepts optional `additional_tools: [{"id":"summarize-csv","
 Run submission accepts `files: [{"name": "data.csv", "content_base64": "..."}]`: at most 8 files, 1 MiB each, 4 MiB decoded total. Files are isolated to their run and expire on every terminal state. Run detail includes metadata in `files`; `download_url` becomes null at expiry. `GET /v1/runs/{id}/files/{index}` requires admin auth and returns 410 after the run ends.
 
 Supported archive uploads automatically select/invoke the archive tool. `GET /v1/runs/{id}/artifacts.zip` downloads all outputs as ZIP; run detail advertises `artifacts_archive_url` when there is more than one output. Individual outputs retain the existing artifact endpoint. See [files, complete examples, limits, and GUI/API parity](files.md).
+
+## Queue and schedules
+
+`GET /v1/queue` reports queue counts/capacity. `GET` and `POST /v1/schedules` list/create one-time or fixed-interval schedules; `PATCH /v1/schedules/{id}` pauses/resumes and `DELETE` removes future scheduling while preserving runs. All require administration authentication. Run responses include nullable `schedule_id` and `scheduled_for`. See [the complete scheduling contract and runnable example](scheduling.md).

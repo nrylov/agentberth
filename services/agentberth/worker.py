@@ -5,11 +5,12 @@ import signal
 import time
 from pathlib import Path
 
-from agentberth import db
+from agentberth import db, scheduler
 from agentberth.backends import RunSpec, BackendError, CleanupError, create_backend
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 stopping = False
+last_schedule_tick = 0.0
 
 
 def stop(*_):
@@ -18,9 +19,13 @@ def stop(*_):
 
 
 def heartbeat(lock):
+    global last_schedule_tick
     # Use the same connection that owns the lock; if it fails, stop scheduling.
     lock.execute("INSERT INTO worker_status VALUES (1,now()) ON CONFLICT (id) DO UPDATE SET heartbeat=now()")
     Path("/tmp/agentberth-worker-heartbeat").write_text(str(time.time()))
+    if time.monotonic() - last_schedule_tick >= 1:
+        scheduler.tick()
+        last_schedule_tick = time.monotonic()
 
 
 def execute(backend, row, token, lock):
@@ -92,6 +97,7 @@ def main():
         try:
             with db.connect() as conn:
                 conn.execute("SELECT id FROM worker_status LIMIT 1")
+                conn.execute("SELECT id FROM schedules LIMIT 1")
             break
         except Exception:
             if time.monotonic() > deadline:
@@ -113,7 +119,7 @@ def main():
             token = secrets.token_urlsafe(32)
             with db.connect() as conn:
                 row = conn.execute(
-                    "SELECT * FROM runs WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1"
+                    "SELECT * FROM runs WHERE status='queued' ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1"
                 ).fetchone()
                 if row:
                     conn.execute(

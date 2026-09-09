@@ -68,6 +68,20 @@ def initialize():
             id integer PRIMARY KEY, heartbeat timestamptz NOT NULL
         );
         """)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS schedules (
+            id text PRIMARY KEY, name text NOT NULL,
+            agent_slug text NOT NULL REFERENCES agents(slug), version integer NOT NULL,
+            spec jsonb NOT NULL, input text NOT NULL, interval_seconds integer,
+            next_run_at timestamptz, enabled boolean NOT NULL DEFAULT true,
+            last_run_id text REFERENCES runs(id), created_at timestamptz NOT NULL DEFAULT now()
+        );
+        ALTER TABLE runs ADD COLUMN IF NOT EXISTS schedule_id text;
+        ALTER TABLE runs ADD COLUMN IF NOT EXISTS scheduled_for timestamptz;
+        CREATE UNIQUE INDEX IF NOT EXISTS runs_schedule_occurrence_idx
+            ON runs(schedule_id,scheduled_for) WHERE schedule_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS schedules_due_idx ON schedules(next_run_at) WHERE enabled;
+        """)
         conn.execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS data bytea")
         # Remove any terminal staging payloads left by older platform builds.
         conn.execute(

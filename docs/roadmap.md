@@ -59,3 +59,7 @@ References: [Firecracker getting started](https://github.com/firecracker-microvm
 - Tenant budgets, distributed scheduling, and workload image supply-chain controls.
 
 These are not implied by the current UI or API. Keep “planned” labels until each mode has reproducible deployment instructions and passing integration tests.
+
+## Queue and schedules: implemented
+
+Persistent FIFO queue, one-time and fixed-interval schedules, pinned task/tool snapshots, overlap suppression, missed-interval coalescing, pause/resume/delete, GUI/API controls, and a no-credit recurring report example are implemented. Calendar cron expressions, timezone-aware wall-clock recurrence, priorities, retries, and distributed workers remain future work. See [scheduling](scheduling.md).

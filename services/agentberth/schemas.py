@@ -123,6 +123,8 @@ class RunLinks(BaseModel):
 
 
 class RunSummary(BaseModel):
+    schedule_id: str | None = None
+    scheduled_for: datetime | None = None
     id: str
     agent_slug: str
     version: int
@@ -172,3 +174,46 @@ class WorkspaceSettings(BaseModel):
     worker_online: bool
     auth_mode: str
     demo_key: bool
+
+
+class ScheduleInput(BaseModel):
+    # Files are deliberately unsupported: uploads belong to exactly one run.
+    model_config = {"extra": "forbid"}
+    name: str = Field(min_length=1, max_length=80)
+    agent_slug: str = Field(pattern=r"^[a-z][a-z0-9-]{1,47}$")
+    input: str = Field(min_length=1, max_length=8000)
+    start_at: datetime
+    interval_seconds: int | None = Field(default=None, ge=60, le=31536000)
+    additional_tools: list[ToolRef] = Field(default_factory=list, max_length=12)
+    disabled_tools: list[str] = Field(default_factory=list, max_length=12)
+
+    @field_validator("start_at")
+    @classmethod
+    def timezone_required(cls, value):
+        if value.tzinfo is None:
+            raise ValueError("start_at must include a timezone offset or Z.")
+        return value
+
+
+class ScheduleState(BaseModel):
+    model_config = {"extra": "forbid"}
+    enabled: bool
+
+
+class ScheduleRecord(BaseModel):
+    id: str
+    name: str
+    agent_slug: str
+    version: int
+    input: str
+    interval_seconds: int | None
+    next_run_at: datetime | None
+    enabled: bool
+    last_run_id: str | None
+    created_at: datetime
+
+
+class QueueStatus(BaseModel):
+    queued: int
+    running: int
+    capacity: int

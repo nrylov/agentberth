@@ -71,3 +71,7 @@ Bundled folders are discovered at API startup and registered transactionally in 
 New runs embed their resolved package contents and hashes in `spec.tool_packages`; registry publication cannot change an accepted run. The gateway uses snapshot schemas and runtime invocations execute snapshot handlers in child processes inside the container. No package source is executed by the API or worker. Fixture runs use the same queue, container backend, events, deadlines, and cleanup behavior with `spec.tool_test` enabled and no model calls.
 
 The registry table is created additively under the existing startup schema lock. Existing agent defaults and queued runs are upgraded transactionally; historical terminal runs are left unchanged. A general schema migration framework is still future work.
+
+## Persistent scheduling
+
+The active worker materializes due PostgreSQL schedules during its heartbeat, both while idle and executing a sandbox. Immutable schedule snapshots reuse the normal run protocol. A shared advisory transaction lock bounds all run producers to 50 queued tasks; run insertion, event creation, and advancement of the schedule commit together. Each schedule has at most one queued/running occurrence. A unique `(schedule_id, scheduled_for)` index protects occurrence identity. See [scheduling](scheduling.md) for cadence, downtime, pause, and input-file semantics.

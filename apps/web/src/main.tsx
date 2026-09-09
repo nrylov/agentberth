@@ -28,6 +28,7 @@ import {
 import "./style.css";
 import { ToolsView, refKey, type ToolRef, type ToolRecord } from "./ToolsView";
 
+import { SchedulesView, type Schedule, type Queue } from "./SchedulesView";
 import { RunFiles, encodeFiles } from "./RunFiles";
 
 type Config = {
@@ -81,7 +82,7 @@ type Settings = {
   worker_online: boolean;
   demo_key: boolean;
 };
-type View = "playground" | "runs" | "settings" | "tools";
+type View = "schedules" | "playground" | "runs" | "settings" | "tools";
 const terminal = new Set(["completed", "failed", "cancelled", "timed_out"]);
 const initial: Config = {
   name: "",
@@ -122,6 +123,8 @@ function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selected, setSelected] = useState("harbor-guide");
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [queue, setQueue] = useState<Queue | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [tools, setTools] = useState<ToolRecord[]>([]);
   const [additionalTools, setAdditionalTools] = useState<ToolRef[]>([]);
@@ -177,12 +180,16 @@ function App() {
 
   async function refresh() {
     try {
-      const [a, s, r, t] = await Promise.all([
+      const [a, s, r, t, sc, q] = await Promise.all([
         api<Agent[]>("/v1/agents"),
         api<Settings>("/v1/settings"),
         api<Run[]>("/v1/runs"),
         api<ToolRecord[]>("/v1/tools"),
+        api<Schedule[]>("/v1/schedules"),
+        api<Queue>("/v1/queue"),
       ]);
+      setSchedules(sc);
+      setQueue(q);
       setAgents(a);
       setTools(t);
       setSettings(s);
@@ -527,6 +534,15 @@ function App() {
         <p className="nav-label">WORKSPACE</p>
         <nav aria-label="Main navigation">
           <button
+            className={view === "schedules" ? "selected" : ""}
+            onClick={() => setView("schedules")}
+          >
+            <Layers size={18} /> Schedules{" "}
+            <span className="count" title="Queued tasks">
+              {queue?.queued ?? 0}
+            </span>
+          </button>
+          <button
             className={view === "playground" ? "selected" : ""}
             onClick={() => setView("playground")}
           >
@@ -579,13 +595,15 @@ function App() {
           <span>
             Workspace <ChevronRight size={14} />{" "}
             <strong>
-              {view === "playground"
-                ? "Agents"
-                : view === "runs"
-                  ? "Run history"
-                  : view === "tools"
-                    ? "Tools"
-                    : "Settings"}
+              {view === "schedules"
+                ? "Queue & schedules"
+                : view === "playground"
+                  ? "Agents"
+                  : view === "runs"
+                    ? "Run history"
+                    : view === "tools"
+                      ? "Tools"
+                      : "Settings"}
             </strong>
           </span>
           <div className="topbar-actions">
@@ -609,6 +627,20 @@ function App() {
           </div>
         </header>
         <div className="content">
+          {view === "schedules" && (
+            <SchedulesView
+              schedules={schedules}
+              queue={queue}
+              agents={agents}
+              tools={tools}
+              runs={runs}
+              api={api}
+              refresh={refresh}
+              onRun={async (id) => {
+                await openRun(await api<Run>(`/v1/runs/${id}`));
+              }}
+            />
+          )}
           {view === "tools" && (
             <ToolsView
               tools={tools}

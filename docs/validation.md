@@ -74,3 +74,12 @@ Local checks on 2026-09-09: 50 Python tests, Ruff checks, frontend production bu
 - No browser visual verification was performed.
 
 The DigitalOcean OpenRouter/custom-tool integration also passed: 3 model calls, provider-reported cost $0.001305, followed by successful tool-version deletion and historical snapshot checks.
+
+## Queue and schedule validation (2026-09-09)
+
+- Python unit/contract suite: **57 passed**; Ruff lint/format and TypeScript/Vite/Prettier checks passed.
+- Seven isolated PostgreSQL integration tests passed: concurrent scheduler ticks, rollback, capacity/idempotency, overlap, cadence, pause/resume/delete, one-time execution, and pinned agent configuration.
+- Docker and DigitalOcean Kubernetes each completed two distinct minute-interval report runs through `scripts/example_schedules.py`. Both reports were downloaded and checked for total 54 and average 18. Example schedules were left paused for inspection; no LLM calls or credits were used.
+- GUI verification: created a one-time schedule and opened its completed run and report; inspected the scheduling page and corrected sidebar label visually.
+- Existing local auth/run/idempotency/event/artifact/cancellation smoke checks passed. File/archive regression checks also passed, including exact binary downloads, automatic archive extraction, multi-output ZIPs, and input expiry.
+- CI definitions now include scheduler checks and the recurring example, but the updated GitHub Actions workflow has not been observed running. This scheduling increment was not retested on kind or MicroK8s.

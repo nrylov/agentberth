@@ -196,6 +196,8 @@ nav {
   gap: 5px;
 }
 nav button {
+  text-align: left;
+  white-space: nowrap;
   background: none;
   justify-content: flex-start;
   color: var(--text-secondary);
@@ -203,6 +205,10 @@ nav button {
   border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 500;
+}
+nav button svg,
+nav button .count {
+  flex-shrink: 0;
 }
 nav button.selected {
   background: var(--surface-subtle);
@@ -1393,4 +1399,42 @@ input::file-selector-button {
   background: var(--surface-subtle);
   color: var(--text);
   cursor: pointer;
+}
+
+.schedule-panel {
+  margin-bottom: 24px;
+}
+.schedule-form {
+  display: grid;
+  gap: 16px;
+}
+.schedule-form label {
+  display: grid;
+  gap: 8px;
+}
+.schedule-form fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.schedule-form .schedule-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.schedule-check input {
+  width: auto;
+}
+.schedule-detail {
+  display: block;
+  max-width: 350px;
+  overflow-wrap: anywhere;
+  margin-top: 6px;
+}
+.schedule-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }

@@ -2,9 +2,9 @@
 
 **Package agents. Bring your model. Deploy an API.**
 
-Agentberth is a local-first agent execution platform. Configure an agent in the console, give it tools, and invoke it through an authenticated HTTP endpoint. Every run executes in a fresh Docker container with a temporary workspace.
+Agentberth is a local-first agent execution platform. Configure an agent in the console, give it tools, and invoke it through an authenticated HTTP endpoint. Every run executes in a fresh Docker container or Kubernetes Job with a temporary workspace.
 
-**Status: working local preview (v0.1).** Docker is implemented. Kubernetes Jobs, Helm deployment, and VM-backed execution are planned; they are not working deployment options in this release. This is a single-administrator development system, not a production multi-tenant service.
+**Status: working preview (v0.1).** Docker Compose, Kubernetes Jobs/Helm deployment, task queueing, and one-time/repeating schedules are implemented. VM-backed execution remains planned. This is a single-administrator development system, not a production multi-tenant service.
 
 ## Quick start
 
@@ -29,6 +29,18 @@ docker compose down
 ```
 
 `docker compose down -v` also permanently deletes the local database and artifacts. Use it only when you want a full reset.
+
+## Queue and schedule tasks
+
+Open **Schedules** to inspect pending tasks, schedule a one-time run, or repeat a task at a fixed interval. Pause/resume/delete controls are available through both the GUI and API. Schedules persist in PostgreSQL and work with Docker and Kubernetes.
+
+Try the no-credit recurring report example:
+
+```bash
+python3 scripts/example_schedules.py
+```
+
+It runs twice, downloads two reports, and leaves the schedule paused for inspection. See [scheduling semantics and API examples](docs/scheduling.md) and [Kubernetes setup](docs/kubernetes.md).
 
 ## Connect a real model
 

@@ -32,6 +32,10 @@ from agentberth.schemas import (
     RunSummary,
     RunDetail,
     WorkspaceSettings,
+    ScheduleInput,
+    ScheduleState,
+    ScheduleRecord,
+    QueueStatus,
 )
 from runtime.packages import definitions
 from runtime.files import decode_file
@@ -45,7 +49,7 @@ BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
 PROVIDER_KEY = os.getenv("LLM_API_KEY", "")
 RUN_FIELDS = (
     "id,agent_slug,version,input,status,output,error,created_at,started_at,finished_at,"
-    "cancel_requested,model_calls,prompt_tokens,completion_tokens,cost"
+    "cancel_requested,model_calls,prompt_tokens,completion_tokens,cost,schedule_id,scheduled_for"
 )
 
 
@@ -208,6 +212,7 @@ def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(defau
     )
     request_hash = hashlib.sha256(hash_input.encode()).hexdigest()
     with db.connect() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(71004)")
         # Serialize submissions for one deployment; acceptance and event are atomic.
         agent = conn.execute("SELECT * FROM agents WHERE slug=%s FOR UPDATE", (slug,)).fetchone()
         if not agent:
@@ -221,25 +226,8 @@ def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(defau
                 if previous["request_hash"] != request_hash:
                     raise HTTPException(409, "Idempotency key was already used with different input.")
                 return run_links(previous["id"])
-        spec = agent["config"]
-        if spec["provider"] == "openrouter" and not PROVIDER_KEY:
-            raise HTTPException(
-                422, "Configure LLM_API_KEY in the API environment and restart the API service first."
-            )
-        if spec["provider"] == "openrouter" and BASE_URL != "https://openrouter.ai/api/v1":
-            raise HTTPException(422, "This release supports the OpenRouter endpoint only.")
-        if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:
-            raise HTTPException(429, "The local queue is full. Try again after some runs finish.")
-        additions = [r.model_dump() for r in body.additional_tools]
-        enabled = [r for r in spec["tools"] if r["id"] not in body.disabled_tools] + additions
-        if any(is_archive(f.name) for f in body.files) and not any(r["id"] == "archive" for r in enabled):
-            additions.append({"id": "archive", "version": "1.0.0"})
-        spec["tools"], spec["tool_packages"] = registry.snapshot(
-            conn, spec["tools"], additions, body.disabled_tools
-        )
-        spec["files"] = [f.model_dump() for f in body.files]
-        spec["input_files"] = [{"name": f.name, "size": len(f.bytes_value())} for f in body.files]
-        spec["model"] = spec["model"] or MODEL
+        queue_capacity(conn)
+        spec = snapshot_run(conn, agent, body)
         run_id = db.new_id()
         conn.execute(
             "INSERT INTO runs(id,agent_slug,version,spec,input,idempotency_key,request_hash) "
@@ -248,6 +236,27 @@ def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(defau
         )
         db.event(conn, run_id, "run.queued", {"version": agent["version"], "provider": spec["provider"]})
         return run_links(run_id)
+
+
+def snapshot_run(conn, agent, body):
+    spec = agent["config"]
+    if spec["provider"] == "openrouter" and not PROVIDER_KEY:
+        raise HTTPException(
+            422, "Configure LLM_API_KEY in the API environment and restart the API service first."
+        )
+    if spec["provider"] == "openrouter" and BASE_URL != "https://openrouter.ai/api/v1":
+        raise HTTPException(422, "This release supports the OpenRouter endpoint only.")
+    additions = [r.model_dump() for r in body.additional_tools]
+    enabled = [r for r in spec["tools"] if r["id"] not in body.disabled_tools] + additions
+    if any(is_archive(f.name) for f in body.files) and not any(r["id"] == "archive" for r in enabled):
+        additions.append({"id": "archive", "version": "1.0.0"})
+    spec["tools"], spec["tool_packages"] = registry.snapshot(
+        conn, spec["tools"], additions, body.disabled_tools
+    )
+    spec["files"] = [f.model_dump() for f in body.files]
+    spec["input_files"] = [{"name": f.name, "size": len(f.bytes_value())} for f in body.files]
+    spec["model"] = spec["model"] or MODEL
+    return spec
 
 
 def run_links(run_id):
@@ -565,6 +574,7 @@ def export_tool(tool_id: str, version: str):
 @app.post("/v1/tools/{tool_id}/{version}/test", status_code=202, dependencies=[Depends(admin)])
 def test_tool(tool_id: str, version: str):
     with db.connect() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(71004)")
         row = conn.execute(
             "SELECT * FROM tool_versions WHERE tool_id=%s AND version=%s AND status!='deleted' FOR UPDATE",
             (tool_id, version),
@@ -575,8 +585,7 @@ def test_tool(tool_id: str, version: str):
             previous = conn.execute("SELECT status FROM runs WHERE id=%s", (row["test_run_id"],)).fetchone()
             if previous and previous["status"] not in db.TERMINAL:
                 return run_links(row["test_run_id"])
-        if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:
-            raise HTTPException(429, "The local queue is full. Try again after some runs finish.")
+        queue_capacity(conn)
         package = {**row["package"], "sha256": row["sha256"]}
         spec = {
             "provider": "demo",
@@ -633,3 +642,82 @@ if web.exists():
     @app.get("/", include_in_schema=False)
     def index():
         return FileResponse(web / "index.html")
+
+
+SCHEDULE_FIELDS = (
+    "id,name,agent_slug,version,input,interval_seconds,next_run_at,enabled,last_run_id,created_at"
+)
+
+
+def queue_capacity(conn):
+    conn.execute("SELECT pg_advisory_xact_lock(71004)")
+    if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:
+        raise HTTPException(429, "The queue is full. Try again after some runs finish.")
+
+
+@app.get("/v1/queue", response_model=QueueStatus, dependencies=[Depends(admin)])
+def queue_status():
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT count(*) FILTER (WHERE status='queued') AS queued, "
+            "count(*) FILTER (WHERE status='running') AS running FROM runs"
+        ).fetchone()
+        return {**row, "capacity": 50}
+
+
+@app.get("/v1/schedules", response_model=list[ScheduleRecord], dependencies=[Depends(admin)])
+def schedules():
+    with db.connect() as conn:
+        return conn.execute(f"SELECT {SCHEDULE_FIELDS} FROM schedules ORDER BY created_at DESC").fetchall()
+
+
+@app.post("/v1/schedules", status_code=201, response_model=ScheduleRecord, dependencies=[Depends(admin)])
+def create_schedule(body: ScheduleInput):
+    with db.connect() as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(71003)")
+        if conn.execute("SELECT count(*) AS n FROM schedules").fetchone()["n"] >= 100:
+            raise HTTPException(429, "At most 100 schedules are supported. Delete unused schedules first.")
+        agent = conn.execute("SELECT * FROM agents WHERE slug=%s FOR UPDATE", (body.agent_slug,)).fetchone()
+        if not agent:
+            raise HTTPException(404, "Deployment not found.")
+        spec = snapshot_run(
+            conn,
+            agent,
+            RunInput(
+                input=body.input, additional_tools=body.additional_tools, disabled_tools=body.disabled_tools
+            ),
+        )
+        return conn.execute(
+            f"INSERT INTO schedules(id,name,agent_slug,version,spec,input,interval_seconds,next_run_at) "
+            f"VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING {SCHEDULE_FIELDS}",
+            (
+                db.new_id(),
+                body.name,
+                body.agent_slug,
+                agent["version"],
+                Jsonb(spec),
+                body.input,
+                body.interval_seconds,
+                body.start_at,
+            ),
+        ).fetchone()
+
+
+@app.patch("/v1/schedules/{schedule_id}", response_model=ScheduleRecord, dependencies=[Depends(admin)])
+def set_schedule_state(schedule_id: str, body: ScheduleState):
+    with db.connect() as conn:
+        row = conn.execute(
+            f"UPDATE schedules SET enabled=%s WHERE id=%s RETURNING {SCHEDULE_FIELDS}",
+            (body.enabled, schedule_id),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Schedule not found.")
+        return row
+
+
+@app.delete("/v1/schedules/{schedule_id}", dependencies=[Depends(admin)])
+def delete_schedule(schedule_id: str):
+    with db.connect() as conn:
+        if not conn.execute("DELETE FROM schedules WHERE id=%s RETURNING id", (schedule_id,)).fetchone():
+            raise HTTPException(404, "Schedule not found.")
+    return {"deleted": True}
