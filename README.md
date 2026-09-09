@@ -8,6 +8,18 @@ Run the platform with Docker Compose or deploy it to Kubernetes with Helm. Both 
 
 **Project status:** functional preview for development and evaluation by a single trusted administrator. Docker and Kubernetes execution are implemented; multi-tenant authorization, high availability, and microVM execution remain outside the current release. See the [security model](docs/security.md) and [roadmap](docs/roadmap.md) for scope and limitations.
 
+## Philosophy
+
+Agentberth is built on the belief that you should own your data and control the software that processes it. Convenience should not come at the expense of that control. These principles guide both the implementation and the project's direction.
+
+**Data retention should be a deliberate choice.** Data should be kept because it serves a purpose you have chosen, rather than simply because storage is available. Uploaded input files are scoped to a single task and expire when that task reaches a terminal state. Outputs and run records currently persist; planned retention controls will allow results to expire after a configurable period or be removed after a successful download. Input-file expiry does not remove information reproduced in prompts, tool events, or results, so retention needs to address the full lifecycle of a task.
+
+**Self-hosting should be a first-class option.** You should be able to run the platform on infrastructure you control, inspect how it works, and adapt it to your needs. Agentberth supports Docker Compose and Kubernetes so that its operation is not tied to a particular hosting provider. Managed cloud infrastructure is a valid choice when it is useful; the important part is that the choice remains yours.
+
+**Model choice should include local AI.** Running your own models can provide greater control over privacy, availability, and cost. Support for local inference through tools such as Ollama and LM Studio is planned. The current implementation uses OpenRouter for LLM inference, which sends prompts and tool results to external providers; self-hosting the application does not yet make model inference local. The deterministic demonstration runs without a model service.
+
+**Open source should make that control practical.** Access to source code matters most when people can understand, run, modify, and build on it. Documented APIs, portable tool packages, reproducible examples, and clear setup instructions are core parts of the project. The aim is to give users and contributors the means to maintain their own deployments and shape the software around their needs.
+
 ## Capabilities
 
 - **Agent APIs:** configure instructions, model settings, and tools; invoke agents through authenticated endpoints with idempotent submission support.
