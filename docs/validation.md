@@ -50,3 +50,13 @@ Validated on 2026-09-09 against the local Docker stack:
 ## Console themes
 
 The TypeScript/Vite production build and formatting checks pass for the default dark theme and light-mode switch. Theme initialization was checked with no saved preference, both valid preferences, an invalid stored value, and unavailable browser storage. The preference initializer is served as an external same-origin asset to comply with the console CSP. Visual browser verification was not performed.
+
+## Run files and archives
+
+Validated on 2026-09-09 against the local Docker stack:
+
+- 43 Python tests passed, including binary transport validation, input staging, output limits, ZIP/TAR extraction, archive traversal/link rejection, expansion bounds, and ZIP creation.
+- Ruff and the TypeScript/Vite production build passed. Browser visual verification was not performed.
+- The file integration suite verified a 1 MiB binary upload through the real sandbox and byte-for-byte output download, automatic archive resolution/extraction, combined output ZIP, authentication, idempotency, and invalid-archive failure.
+- Recovery checks verified input expiry after timeout, cancellation, and worker-restart failure. Completed/failed runs were also covered. A direct database assertion found no terminal run retaining its input payload.
+- Existing demo integration checks and older UTF-8 artifact compatibility passed. The bundled archive fixture and documented `scripts/run_files.py` example passed without model credits.

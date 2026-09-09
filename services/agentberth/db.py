@@ -21,7 +21,7 @@ def event(conn, run_id, kind, data):
 
 def finish(conn, run_id, status, error=None):
     row = conn.execute(
-        "UPDATE runs SET status=%s,error=%s,finished_at=now(),token_hash=NULL "
+        "UPDATE runs SET status=%s,error=%s,finished_at=now(),token_hash=NULL,spec=spec-'files' "
         "WHERE id=%s AND status NOT IN ('completed','failed','cancelled','timed_out') RETURNING id",
         (status, error, run_id),
     ).fetchone()
@@ -68,6 +68,11 @@ def initialize():
             id integer PRIMARY KEY, heartbeat timestamptz NOT NULL
         );
         """)
+        conn.execute("ALTER TABLE artifacts ADD COLUMN IF NOT EXISTS data bytea")
+        # Remove any terminal staging payloads left by older platform builds.
+        conn.execute(
+            "UPDATE runs SET spec=spec-'files' WHERE status IN ('completed','failed','cancelled','timed_out') AND spec ? 'files'"
+        )
         from agentberth import registry
 
         registry.bundled(conn)

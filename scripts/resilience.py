@@ -32,13 +32,24 @@ def docker(*arguments):
 
 
 def paused_run(slug):
-    run_id = request(f"/v1/deployments/{slug}/runs", {"input": "Development fault injection."})["id"]
+    run_id = request(
+        f"/v1/deployments/{slug}/runs",
+        {
+            "input": "Development fault injection.",
+            "files": [{"name": "ephemeral.txt", "content_base64": "dGVzdA=="}],
+        },
+    )["id"]
     deadline = time.monotonic() + 15
     while time.monotonic() < deadline:
         ids = docker("ps", "-q", "--filter", f"label=agentberth.run={run_id}")
         if ids:
             handle = ids.splitlines()[0]
             docker("pause", handle)
+            req = urllib.request.Request(
+                args.base_url + f"/v1/runs/{run_id}/files/0", headers={"Authorization": "Bearer " + key}
+            )
+            with urllib.request.urlopen(req) as response:
+                assert response.read() == b"test"
             return run_id, handle
         time.sleep(0.05)
     raise AssertionError("Sandbox not found in time")
@@ -49,6 +60,13 @@ def terminal(run_id):
     while time.monotonic() < deadline:
         run = request("/v1/runs/" + run_id)
         if run["status"] in {"completed", "failed", "cancelled", "timed_out"}:
+            assert run["files"][0]["download_url"] is None
+            try:
+                request(f"/v1/runs/{run_id}/files/0")
+            except urllib.error.HTTPError as exc:
+                assert exc.code == 410
+            else:
+                raise AssertionError("Terminal inputs remained downloadable")
             return run
         time.sleep(0.25)
     raise AssertionError("Run did not finish")

@@ -1,8 +1,11 @@
 import asyncio
+import io
+import zipfile
 import hashlib
 import hmac
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -30,6 +33,8 @@ from agentberth.schemas import (
     WorkspaceSettings,
 )
 from runtime.packages import definitions
+from runtime.files import decode_file
+from runtime.archives import is_archive
 from agentberth import registry
 from jsonschema.exceptions import SchemaError, ValidationError
 
@@ -75,11 +80,16 @@ async def package_schema_error(request, exc):
 @app.middleware("http")
 async def bounds(request: Request, call_next):
     # Bound request bodies before Pydantic/JSON parsing, including chunked requests.
+    file_route = request.method == "POST" and (
+        re.fullmatch(r"/v1/deployments/[^/]+/runs/?", request.url.path)
+        or re.fullmatch(r"/internal/runs/[^/]+/result/?", request.url.path)
+    )
+    limit = 6_000_000 if file_route else 600_000
     size = 0
     chunks = []
     async for chunk in request.stream():
         size += len(chunk)
-        if size > 600_000:
+        if size > limit:
             return Response("Request body too large", status_code=413)
         chunks.append(chunk)
     request._body = b"".join(chunks)
@@ -188,8 +198,12 @@ def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(defau
     # Preserve idempotency for pre-registry calls with no overrides.
     hash_input = (
         body.input
-        if not body.additional_tools and not body.disabled_tools
-        else json.dumps(body.model_dump(), sort_keys=True, separators=(",", ":"))
+        if not body.additional_tools and not body.disabled_tools and not body.files
+        else json.dumps(
+            body.model_dump(exclude={"files"} if not body.files else set()),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     )
     request_hash = hashlib.sha256(hash_input.encode()).hexdigest()
     with db.connect() as conn:
@@ -213,9 +227,15 @@ def submit(slug: str, body: RunInput, idempotency_key: str | None = Header(defau
             raise HTTPException(422, "This release supports the OpenRouter endpoint only.")
         if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:
             raise HTTPException(429, "The local queue is full. Try again after some runs finish.")
+        additions = [r.model_dump() for r in body.additional_tools]
+        enabled = [r for r in spec["tools"] if r["id"] not in body.disabled_tools] + additions
+        if any(is_archive(f.name) for f in body.files) and not any(r["id"] == "archive" for r in enabled):
+            additions.append({"id": "archive", "version": "1.0.0"})
         spec["tools"], spec["tool_packages"] = registry.snapshot(
-            conn, spec["tools"], [r.model_dump() for r in body.additional_tools], body.disabled_tools
+            conn, spec["tools"], additions, body.disabled_tools
         )
+        spec["files"] = [f.model_dump() for f in body.files]
+        spec["input_files"] = [{"name": f.name, "size": len(f.bytes_value())} for f in body.files]
         spec["model"] = spec["model"] or MODEL
         run_id = db.new_id()
         conn.execute(
@@ -242,11 +262,23 @@ def run(run_id: str):
     with db.connect() as conn:
         row = get_run(conn, run_id)
         spec = conn.execute("SELECT spec FROM runs WHERE id=%s", (run_id,)).fetchone()["spec"]
+        row["files"] = [
+            {
+                "name": f["name"],
+                "size": f["size"],
+                "workspace_path": "inputs/" + f["name"],
+                "download_url": f"/v1/runs/{run_id}/files/{i}" if row["status"] not in db.TERMINAL else None,
+            }
+            for i, f in enumerate(spec.get("input_files", []))
+        ]
         row["resolved_tools"] = registry.refs(spec.get("tool_packages", []))
         row["artifacts"] = conn.execute(
-            "SELECT id,name,octet_length(content) AS size FROM artifacts WHERE run_id=%s ORDER BY name",
+            "SELECT id,name,COALESCE(octet_length(data),octet_length(content)) AS size FROM artifacts WHERE run_id=%s ORDER BY name",
             (run_id,),
         ).fetchall()
+        row["artifacts_archive_url"] = (
+            f"/v1/runs/{run_id}/artifacts.zip" if len(row["artifacts"]) > 1 else None
+        )
         return row
 
 
@@ -299,6 +331,28 @@ def events(
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
 
 
+@app.get("/v1/runs/{run_id}/artifacts.zip", dependencies=[Depends(admin)])
+def download_all(run_id: str):
+    with db.connect() as conn:
+        get_run(conn, run_id)
+        rows = conn.execute(
+            "SELECT name,content,data FROM artifacts WHERE run_id=%s ORDER BY name", (run_id,)
+        ).fetchall()
+    if not rows:
+        raise HTTPException(404, "No output files are available.")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for row in rows:
+            archive.writestr(
+                row["name"], bytes(row["data"]) if row["data"] is not None else row["content"].encode("utf-8")
+            )
+    return Response(
+        buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="outputs.zip"'},
+    )
+
+
 @app.get("/v1/runs/{run_id}/artifacts/{artifact_id}", dependencies=[Depends(admin)])
 def download(run_id: str, artifact_id: str):
     with db.connect() as conn:
@@ -309,9 +363,26 @@ def download(run_id: str, artifact_id: str):
             raise HTTPException(404, "Artifact not found.")
     name = Path(row["name"]).name
     return Response(
-        row["content"],
-        media_type="text/plain",
+        bytes(row["data"]) if row["data"] is not None else row["content"].encode("utf-8"),
+        media_type="application/octet-stream",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@app.get("/v1/runs/{run_id}/files/{file_index}", dependencies=[Depends(admin)])
+def download_input(run_id: str, file_index: int):
+    with db.connect() as conn:
+        row = conn.execute("SELECT spec,status FROM runs WHERE id=%s", (run_id,)).fetchone()
+        if row and row["status"] in db.TERMINAL:
+            raise HTTPException(410, "Input files expired when this run ended.")
+        files = row["spec"].get("files", []) if row else []
+        if file_index < 0 or file_index >= len(files):
+            raise HTTPException(404, "Input file not found.")
+        item = files[file_index]
+    return Response(
+        decode_file(item["content_base64"]),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{Path(item["name"]).name}"'},
     )
 
 
@@ -344,8 +415,8 @@ def result(run_id: str, body: RunResult, authorization: str = Header(default="")
         conn.execute("UPDATE runs SET output=%s WHERE id=%s", (body.output, run_id))
         for artifact in body.artifacts:
             conn.execute(
-                "INSERT INTO artifacts(id,run_id,name,content) VALUES (%s,%s,%s,%s)",
-                (db.new_id(), run_id, artifact.name, artifact.content),
+                "INSERT INTO artifacts(id,run_id,name,content,data) VALUES (%s,%s,%s,%s,%s)",
+                (db.new_id(), run_id, artifact.name, "", artifact.bytes_value()),
             )
         db.event(conn, run_id, "agent.result", {"artifacts": len(body.artifacts)})
     return {"ok": True}

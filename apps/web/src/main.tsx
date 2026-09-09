@@ -28,6 +28,8 @@ import {
 import "./style.css";
 import { ToolsView, refKey, type ToolRef, type ToolRecord } from "./ToolsView";
 
+import { RunFiles, encodeFiles } from "./RunFiles";
+
 type Config = {
   name: string;
   instructions: string;
@@ -52,6 +54,13 @@ type Run = {
   completion_tokens: number;
   cost: string | number;
   cancel_requested: boolean;
+  files?: {
+    name: string;
+    size: number;
+    workspace_path: string;
+    download_url: string | null;
+  }[];
+  artifacts_archive_url?: string | null;
   artifacts?: { id: string; name: string; size: number }[];
   resolved_tools?: {
     id: string;
@@ -124,6 +133,7 @@ function App() {
   const [input, setInput] = useState(
     "Calculate the total and average of 12, 18, and 24. Save a short report to report.md.",
   );
+  const [files, setFiles] = useState<File[]>([]);
   const [active, setActive] = useState<Run | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [error, setError] = useState("");
@@ -392,12 +402,14 @@ function App() {
           method: "POST",
           body: JSON.stringify({
             input,
+            files: await encodeFiles(files),
             additional_tools: additionalTools,
             disabled_tools: disabledTools,
           }),
           headers: { "Idempotency-Key": crypto.randomUUID() },
         },
       );
+      setFiles([]);
       setActive(await api<Run>(`/v1/runs/${accepted.id}`));
       void refresh();
     } catch (e) {
@@ -422,6 +434,7 @@ function App() {
       setView("playground");
       setSelected(run.agent_slug);
       setInput(run.input);
+      setFiles([]);
       setPane(run.output ? "result" : "events");
     } catch (e) {
       setError((e as Error).message);
@@ -453,11 +466,16 @@ function App() {
       setBusy(false);
     }
   }
-  async function download(artifact: { id: string; name: string }) {
+  async function download(artifact: {
+    id?: string;
+    name: string;
+    download_url?: string | null;
+  }) {
     if (!active) return;
     try {
       const res = await fetch(
-        `/v1/runs/${active.id}/artifacts/${artifact.id}`,
+        artifact.download_url ||
+          `/v1/runs/${active.id}/artifacts/${artifact.id}`,
         { headers: { Authorization: `Bearer ${key}` } },
       );
       if (!res.ok) throw new Error("Artifact download failed.");
@@ -726,6 +744,12 @@ function App() {
                           rows={8}
                           placeholder="What should this agent do?"
                         />
+                        <RunFiles
+                          files={files}
+                          onChange={setFiles}
+                          disabled={busy || running}
+                          onError={setError}
+                        />
                         <div className="tool-label">
                           ENABLED TOOLS <span>{effectiveTools.length}</span>
                         </div>
@@ -913,6 +937,28 @@ function App() {
                               </button>
                             )}
                           </div>
+                          {!!active.files?.length && (
+                            <details className="run-input-files">
+                              <summary>
+                                Input files ({active.files.length})
+                              </summary>
+                              {active.files.map((file) => (
+                                <button
+                                  key={file.name}
+                                  className="text-button"
+                                  disabled={!file.download_url}
+                                  onClick={() => void download(file)}
+                                >
+                                  <Download size={15} /> {file.workspace_path} ·{" "}
+                                  {file.size.toLocaleString()} bytes
+                                </button>
+                              ))}
+                              <p className="hint">
+                                Input files expire when this run ends. Attach
+                                files again when starting another run.
+                              </p>
+                            </details>
+                          )}
                           <div className="activity-content" role="tabpanel">
                             {pane === "events" ? (
                               <div className="event-list">
@@ -944,7 +990,21 @@ function App() {
                                 </pre>
                                 {active.artifacts?.length ? (
                                   <div className="artifacts">
-                                    <h3>Artifacts</h3>
+                                    <h3>Output files</h3>
+                                    {active.artifacts_archive_url && (
+                                      <button
+                                        onClick={() =>
+                                          void download({
+                                            name: "outputs.zip",
+                                            download_url:
+                                              active.artifacts_archive_url,
+                                          })
+                                        }
+                                      >
+                                        <Download size={16} /> Download all as
+                                        ZIP
+                                      </button>
+                                    )}
                                     {active.artifacts.map((a) => (
                                       <button
                                         key={a.id}

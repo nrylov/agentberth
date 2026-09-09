@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Pack a directory",
+    "arguments": {
+      "action": "pack",
+      "path": "source",
+      "destination": "bundle.zip"
+    },
+    "expected": {
+      "path": "bundle.zip",
+      "file_count": 1
+    },
+    "files": {
+      "source/hello.txt": "hello"
+    }
+  }
+]

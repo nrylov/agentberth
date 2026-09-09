@@ -1,6 +1,6 @@
 import json
 import os
-import re
+import base64
 import sys
 import time
 import tempfile
@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 
 from runtime.tools import WORKSPACE, execute
+from runtime.archives import is_archive
+from runtime.files import MAX_FILE_BYTES, MAX_TOTAL_BYTES, validate_name, decode_file
 
 
 def request(path, data=None):
@@ -71,6 +73,12 @@ def demo(context):
             allowed,
         )
     text = "# Agentberth demo report\n\nThis is a deterministic demo, not a model-generated answer.\n\n"
+    if context["spec"].get("input_files"):
+        text += (
+            "Uploaded files (demo does not interpret their contents):\n"
+            + "\n".join("- inputs/" + f["name"] for f in context["spec"]["input_files"])
+            + "\n\n"
+        )
     text += "Your input: " + context["input"] + "\n\nExample calculation:\n" + result.get("output", "")
     if "write_file" in names:
         tool("write_file", {"path": "report.md", "content": text}, allowed)
@@ -83,9 +91,16 @@ def demo(context):
 
 def agent(context):
     spec = context["spec"]
+    file_note = ""
+    if spec.get("input_files"):
+        file_note = (
+            "\n\nUploaded files in the workspace (use tools to read them):\n"
+            + "\n".join("inputs/" + f["name"] for f in spec["input_files"])
+            + "\nUploaded archives were automatically extracted under inputs/extracted/<upload index>/. Use Python to list/read those files. Save deliverables outside inputs/ so they are collected for download."
+        )
     messages = [
         {"role": "system", "content": spec["instructions"]},
-        {"role": "user", "content": context["input"]},
+        {"role": "user", "content": context["input"] + file_note},
     ]
     for _ in range(spec["max_steps"]):
         message = request("/model", {"messages": messages})["message"]
@@ -114,28 +129,40 @@ def agent(context):
     raise ValueError("Agent reached its model-step limit before returning a final answer.")
 
 
+def stage_files(context):
+    for item in context["spec"].get("files", []):
+        name = validate_name(item["name"])
+        target = WORKSPACE / "inputs" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(decode_file(item["content_base64"]))
+
+
 def artifacts():
-    items = []
-    # Walk at most 200 entries; the workspace itself is bounded by tmpfs.
-    scanned = 0
+    items, total, scanned = [], 0, 0
     for root, directories, files in os.walk(WORKSPACE, followlinks=False):
-        directories[:] = [
-            d for d in directories if not d.startswith(".") and not (Path(root) / d).is_symlink()
-        ]
-        for filename in files:
-            scanned += 1
-            if scanned > 200 or len(items) >= 8:
-                return items
+        directories[:] = sorted(
+            d
+            for d in directories
+            if not d.startswith(".")
+            and not (Path(root) / d).is_symlink()
+            and not (Path(root) == WORKSPACE and d == "inputs")
+        )
+        scanned += len(directories) + len(files)
+        if scanned > 200:
+            raise ValueError("Output workspace exceeds the 200-entry scan limit.")
+        for filename in sorted(files):
             path = Path(root) / filename
-            name = str(path.relative_to(WORKSPACE))
-            if path.is_symlink() or not path.is_file() or path.stat().st_size > 64000:
+            if filename.startswith(".") or path.is_symlink() or not path.is_file():
                 continue
-            if not re.fullmatch(r"[a-zA-Z0-9_./-]{1,150}", name):
-                continue
-            try:
-                items.append({"name": name, "content": path.read_text(encoding="utf-8")})
-            except (UnicodeError, OSError):
-                continue
+            name = validate_name(str(path.relative_to(WORKSPACE)))
+            with path.open("rb") as source:
+                content = source.read(MAX_FILE_BYTES + 1)
+            total += len(content)
+            if len(content) > MAX_FILE_BYTES or total > MAX_TOTAL_BYTES or len(items) >= 8:
+                raise ValueError(
+                    "Output file limits exceeded: 8 files, 1 MiB each, 4 MiB total. Save fewer or smaller deliverables."
+                )
+            items.append({"name": name, "content_base64": base64.b64encode(content).decode("ascii")})
     return items
 
 
@@ -166,6 +193,16 @@ def test_package(context):
 def main():
     try:
         context = request("/context")
+        stage_files(context)
+        context["spec"].pop("files", None)
+        for i, item in enumerate(context["spec"].get("input_files", [])):
+            if is_archive(item["name"]):
+                tool(
+                    "archive",
+                    {"path": "inputs/" + item["name"], "destination": f"inputs/extracted/{i}"},
+                    context["spec"]["tool_packages"],
+                    fail_on_error=True,
+                )
         output = (
             test_package(context)
             if context["spec"].get("tool_test")

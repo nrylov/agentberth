@@ -91,7 +91,7 @@ Change the key in these examples if you configured your own. See the [API guide]
 - Per-run tool additions/disabling, package import/export, and immutable package snapshots.
 - Python execution and UTF-8 file read/write tools.
 - Deterministic demo provider and real OpenRouter tool-calling loops.
-- Durable run history, resumable server-sent events, and downloadable text artifacts.
+- Durable run history, resumable server-sent events, and downloadable binary/text artifacts and combined ZIP downloads.
 - Model step limits, usage/cost reporting, cancellation, and interrupted-run recovery.
 - Locked dependencies, unit tests, Compose integration scripts, and a GitHub Actions workflow.
 
@@ -144,3 +144,7 @@ These tests create clearly named example agents and runs in your local database.
 ### Console appearance
 
 The console opens in dark mode by default. Use the sun/moon switch in the top bar to select light mode or return to dark mode. Your choice is saved in this browser and restored on reload.
+
+### File processing
+
+Attach temporary input files or ZIP/TAR archives to a run in the console or API. Archives are automatically extracted in the sandbox. Download generated text/binary files individually or together as ZIP. [File workflow, runnable examples, and GUI/API parity](docs/files.md) explain limits and input expiry.

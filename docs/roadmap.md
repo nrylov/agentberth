@@ -54,7 +54,7 @@ References: [Firecracker getting started](https://github.com/firecracker-microvm
 - Deployment-scoped keys, user accounts, and authorization.
 - Immutable agent version archive and deployment rollback.
 - Sessions, durable conversation state, and optional persistent workspaces.
-- Object storage for larger/binary artifacts.
+- Object storage for larger artifacts; bounded binary artifact transport is implemented.
 - Remote tools and constrained egress.
 - Tenant budgets, distributed scheduling, and workload image supply-chain controls.
 

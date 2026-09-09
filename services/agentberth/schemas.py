@@ -2,8 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from runtime.packages import reference
+from runtime.files import MAX_BASE64, decode_file, validate_name, validate_collection
 
 
 class ToolRef(BaseModel):
@@ -36,8 +37,39 @@ class CreateAgent(AgentConfig):
     slug: str = Field(pattern=r"^[a-z][a-z0-9-]{1,47}$")
 
 
+class FilePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=150)
+    content_base64: str = Field(
+        max_length=MAX_BASE64, description="Base64-encoded bytes; at most 1 MiB decoded."
+    )
+
+    @field_validator("name")
+    @classmethod
+    def safe_name(cls, value):
+        return validate_name(value)
+
+    @field_validator("content_base64")
+    @classmethod
+    def valid_bytes(cls, value):
+        if value is not None:
+            decode_file(value)
+        return value
+
+    def bytes_value(self):
+        return decode_file(self.content_base64)
+
+
 class RunInput(BaseModel):
     input: str = Field(min_length=1, max_length=8000)
+    files: list[FilePayload] = Field(
+        default_factory=list, max_length=8, description="Files staged under inputs/. At most 4 MiB total."
+    )
+
+    @field_validator("files")
+    @classmethod
+    def bounded_files(cls, value):
+        return validate_collection(value)
+
     additional_tools: list[ToolRef] = Field(default_factory=list, max_length=12)
     disabled_tools: list[str] = Field(default_factory=list, max_length=12)
 
@@ -47,14 +79,29 @@ class RuntimeEvent(BaseModel):
     data: dict
 
 
-class Artifact(BaseModel):
-    name: str = Field(pattern=r"^[a-zA-Z0-9_./-]{1,150}$")
-    content: str = Field(max_length=64000)
+class Artifact(FilePayload):
+    # Compatibility with runtimes that still return UTF-8 content.
+    content_base64: str | None = Field(default=None, max_length=MAX_BASE64)
+    content: str | None = Field(default=None, max_length=64000)
+
+    @model_validator(mode="after")
+    def one_encoding(self):
+        if (self.content is None) == (self.content_base64 is None):
+            raise ValueError("Provide exactly one of content or content_base64.")
+        return self
+
+    def bytes_value(self):
+        return self.content.encode("utf-8") if self.content is not None else decode_file(self.content_base64)
 
 
 class RunResult(BaseModel):
     output: str = Field(max_length=30000)
     artifacts: list[Artifact] = Field(default_factory=list, max_length=8)
+
+    @field_validator("artifacts")
+    @classmethod
+    def bounded_artifacts(cls, value):
+        return validate_collection(value)
 
 
 class ModelRequest(BaseModel):
@@ -99,7 +146,16 @@ class ArtifactMetadata(BaseModel):
     size: int
 
 
+class InputFileMetadata(BaseModel):
+    name: str
+    size: int
+    workspace_path: str
+    download_url: str | None
+
+
 class RunDetail(RunSummary):
+    artifacts_archive_url: str | None = None
+    files: list[InputFileMetadata] = Field(default_factory=list)
     artifacts: list[ArtifactMetadata]
     resolved_tools: list[dict] = Field(default_factory=list)
 

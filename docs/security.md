@@ -30,7 +30,7 @@ Docker network topology is not a complete hostile-code egress firewall. Host rea
 
 ## Data and model behavior
 
-Input, tool arguments, tool output, final results, and artifacts are persisted in PostgreSQL. There is no automatic retention or encryption layer beyond your host/storage setup. Model prompts and tool results are sent to OpenRouter and the selected upstream provider. Review their data policies for your intended workload.
+Task text, tool arguments, tool output, final results, and artifacts are persisted in PostgreSQL. Uploaded input bytes are temporary: all terminal run transitions purge them from the run record, and sandbox teardown destroys working and extracted copies. Filename/size metadata remains. There is no automatic retention or encryption layer beyond your host/storage setup. Model prompts and tool results are sent to OpenRouter and the selected upstream provider. Review their data policies for your intended workload.
 
 The gateway enforces a maximum number of model requests and completion tokens per request. This is not a dollar-denominated budget. In-flight model calls can still be billed after cancellation. There are no automatic provider retries, so transient errors fail the run rather than create hidden extra spend.
 

@@ -59,7 +59,7 @@ Response (202):
 | GET | `/v1/runs/{id}` | Status, output, error, timestamps, usage, artifact metadata |
 | POST | `/v1/runs/{id}/cancel` | Request cancellation; terminal runs remain unchanged |
 | GET | `/v1/runs/{id}/events` | Persisted events followed by live events via SSE |
-| GET | `/v1/runs/{id}/artifacts/{artifact_id}` | Download a UTF-8 text attachment |
+| GET | `/v1/runs/{id}/artifacts/{artifact_id}` | Download a text or binary output attachment |
 
 The `cost` value is the provider-reported cost in USD, not a billing guarantee. Demo calls report zero. Usage may finish updating after cancellation if an upstream model request was already in flight.
 
@@ -89,7 +89,7 @@ Input, tool arguments/results, and artifacts can contain user data. Provider-int
 - `429`: local queue or runtime step/event limit reached.
 - `502`: upstream model call failed (internal gateway).
 
-Limits: 8,000 input characters; 1–12 model calls; 2,048 completion tokens per call including any provider reasoning; 10–300 seconds per run; up to 8 tool calls per model turn; 10 seconds per Python tool; 50 queued runs; 600 KB HTTP request bodies. Prompt/context growth contributes to cost across turns.
+Limits: 8,000 input characters; 1–12 model calls; 2,048 completion tokens per call including any provider reasoning; 10–300 seconds per run; up to 8 tool calls per model turn; 10 seconds per Python tool; 50 queued runs; 600 KB HTTP request bodies, except run submissions/internal results (6 MB). Prompt/context growth contributes to cost across turns.
 
 Internal `/internal/runs/{id}/...` routes are reserved for the runtime and require a separate run-scoped token. They are not a public client integration surface.
 
@@ -114,3 +114,9 @@ Run invocation also accepts optional `additional_tools: [{"id":"summarize-csv","
 ### Delete a tool version
 
 `DELETE /v1/tools/{tool_id}/{version}` requires administration bearer authentication and returns `{ "status": "deleted", "tool_id": "...", "version": "..." }`. Only imported versions without agent-default references can be deleted (409 otherwise). Deleted or missing versions return 404. Existing run snapshots remain intact, and deleted version numbers cannot be reused. See [tool deletion](tools.md#delete-a-version) for the UI and CLI workflow.
+
+## Files and archives
+
+Run submission accepts `files: [{"name": "data.csv", "content_base64": "..."}]`: at most 8 files, 1 MiB each, 4 MiB decoded total. Files are isolated to their run and expire on every terminal state. Run detail includes metadata in `files`; `download_url` becomes null at expiry. `GET /v1/runs/{id}/files/{index}` requires admin auth and returns 410 after the run ends.
+
+Supported archive uploads automatically select/invoke the archive tool. `GET /v1/runs/{id}/artifacts.zip` downloads all outputs as ZIP; run detail advertises `artifacts_archive_url` when there is more than one output. Individual outputs retain the existing artifact endpoint. See [files, complete examples, limits, and GUI/API parity](files.md).

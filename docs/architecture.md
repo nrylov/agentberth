@@ -6,7 +6,7 @@
 |---|---|---|
 | React console | Configure agents, submit tasks, inspect results | Administration token in browser session storage after manual login |
 | FastAPI service | Authentication, run acceptance, provider gateway, events/artifacts, static UI | Database credentials and provider API key |
-| PostgreSQL | Durable agents, runs, event sequence, text artifacts, worker heartbeat | Internal database network only |
+| PostgreSQL | Durable agents, runs, event sequence, binary/text artifacts, temporary run inputs, worker heartbeat | Internal database network only |
 | Worker | Claim queued work, launch and monitor containers, terminate and clean up | Database credentials and Docker socket |
 | Runtime | Agent loop and local tools | Run-scoped bearer token and temporary workspace |
 
@@ -21,7 +21,7 @@ The runtime uses Python plus a locked JSON Schema validator; custom handlers tar
 5. Generate a random token; store its SHA-256 hash in PostgreSQL. Give the raw token only to that run's container.
 6. Create a non-root, resource-limited container. The runtime fetches its input/configuration from the internal API.
 7. In real-provider mode, the runtime asks the gateway for a model response, executes requested tools, and sends tool results back on the next model turn. Provider-specific reasoning metadata is preserved in the in-memory conversation, but not emitted in the activity log.
-8. The runtime submits its final text and selected text artifacts to the API, then exits.
+8. The runtime submits its final text and bounded binary/text output files to the API, then exits.
 9. The worker checks the exit result, removes the container, sets a terminal state, and revokes the token.
 
 States: `queued → running → completed | failed | cancelled | timed_out`. A queued run can be cancelled directly. Cancelling a running run immediately blocks new authenticated runtime work; the worker destroys the container on its next monitor cycle. An in-flight provider call may still finish and incur usage, which is recorded even after cancellation.
@@ -34,7 +34,7 @@ A successful result callback alone does not complete a run: the worker also requ
 - Every accepted run stores its own full configuration snapshot. Editing an agent cannot change queued or running work.
 - This preview does **not** retain a separately browsable history of unused agent versions or implement rollback.
 - Event IDs are increasing database sequence values. They are not guaranteed to be contiguous within a run.
-- UTF-8 artifacts are stored in PostgreSQL for the small local preview: at most eight files, 64 KB each. Larger/binary artifacts and object storage are future work.
+- Binary/text artifacts are stored in PostgreSQL: at most eight files, 1 MiB each and 4 MiB total. Inputs are staged per run and purged on all terminal transitions; sandbox inputs and extracted archives are ephemeral. Multiple outputs can be downloaded as ZIP. Larger files and object storage are future work.
 - The container workspace and in-memory conversation are ephemeral. Sessions and persistent workspace reuse are not implemented.
 - PostgreSQL's named volume survives `docker compose down`.
 

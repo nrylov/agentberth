@@ -99,7 +99,7 @@ Check worker logs and Docker availability. Restarting the worker removes orphane
 
 ### Artifact missing
 
-Only up to eight UTF-8 text files with safe filenames and sizes of at most 64 KB are collected. Binary files, symlinks, and larger files are omitted. The workspace is deleted after the run. Ask the agent to write a small `.txt`, `.md`, `.json`, or `.csv` file.
+Up to eight regular binary/text outputs are collected, with a 1 MiB per-file and 4 MiB total limit. Save deliverables outside `inputs/`; hidden files and symlinks are excluded. Exceeding size/count limits fails the run with a diagnostic event. The workspace and staged input bytes expire when the run ends. See [file workflows](files.md) for archive support, API examples, and downloads.
 
 ### Reset local data
 
@@ -117,3 +117,5 @@ Browsers that expose the experimental `document.modelContext` interface can disc
 ## Tool registry development
 
 See [Tool Package v1](tools.md) for the format, immutable version rules, authoring UI, and CLI. `compose.tools-dev.yaml` optionally mounts repository defaults read-only for explicit reloads. Source changes at an existing ID/version are conflicts; bump the version before reloading. Imported packages persist across image rebuilds and restarts.
+
+Run `python3 scripts/smoke_files.py` to verify binary transport, automatic archives, input expiry, and ZIP output without model credits. `scripts/resilience.py` also verifies expiry after timeout, cancellation, and worker restart.

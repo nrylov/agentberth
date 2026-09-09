@@ -1,0 +1,85 @@
+{
+  "format_version": 1,
+  "id": "archive",
+  "version": "1.0.0",
+  "name": "archive",
+  "description": "Extract ZIP or TAR archives into a new workspace directory. Upload archives are extracted automatically under inputs/extracted/. Supports .zip, .tar, .tar.gz, .tgz; rejects links and unsafe paths; at most 128 entries, 4 MiB per member, 16 MiB total. Use action=pack to create a ZIP from a workspace directory.",
+  "runtime": "python",
+  "entrypoint": "handler.py:run",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string"
+      },
+      "destination": {
+        "type": "string"
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "extract",
+          "pack"
+        ],
+        "default": "extract"
+      }
+    },
+    "required": [
+      "path",
+      "destination"
+    ],
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "size": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "path",
+            "size"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "total_bytes": {
+        "type": "integer"
+      },
+      "path": {
+        "type": "string"
+      },
+      "file_count": {
+        "type": "integer"
+      }
+    },
+    "additionalProperties": false,
+    "anyOf": [
+      {
+        "required": [
+          "files",
+          "total_bytes"
+        ]
+      },
+      {
+        "required": [
+          "path",
+          "file_count"
+        ]
+      }
+    ]
+  },
+  "limits": {
+    "timeout_seconds": 15,
+    "max_output_bytes": 32000
+  }
+}
