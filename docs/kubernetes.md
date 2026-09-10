@@ -210,3 +210,61 @@ kubectl --kubeconfig "$KUBECONFIG_PATH" --context "$KUBE_CONTEXT" -n agentberth 
 ```
 
 References: [Kubernetes Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/), [kind quick start](https://kind.sigs.k8s.io/docs/user/quick-start/), [DOKS limits](https://docs.digitalocean.com/products/kubernetes/details/limits/), [MicroK8s hostpath storage](https://canonical.com/microk8s/docs/addon-hostpath-storage).
+
+## External access through a load balancer
+
+The chart can create a separate, opt-in `LoadBalancer` Service for the console/API. The internal Service stays on port 8080 for worker and sandbox callbacks. Port 8081 is only a conventional port-forward port on the client machine; it is not a port exposed on Kubernetes nodes.
+
+The external route is:
+
+```text
+Client → public load balancer:80 → Kubernetes-assigned NodePort → API pod:8080
+```
+
+For a dedicated test installation, place the following in a private values file and supply it with your existing Helm values:
+
+```yaml
+publicAccess:
+  enabled: true
+  port: 80
+  sourceRanges:
+    - "203.0.113.10/32" # Replace with your actual public IPv4 address.
+  annotations:
+    service.beta.kubernetes.io/do-loadbalancer-type: "REGIONAL"
+    service.beta.kubernetes.io/do-loadbalancer-protocol: "http"
+    service.beta.kubernetes.io/do-loadbalancer-http-idle-timeout-seconds: "300"
+    # Optional: adopt an existing load balancer in the cluster's VPC.
+    kubernetes.digitalocean.com/load-balancer-id: "YOUR_EXISTING_LOAD_BALANCER_ID"
+```
+
+Omit the ID annotation to provision a new load balancer, which incurs provider charges. When adopting an existing load balancer, avoid specifying its existing name as well: DigitalOcean's admission validation can reject that combination as a duplicate name. Confirm the Service adopts the intended ID/IP after deployment. Kubernetes manages its forwarding rules, health checks, and node membership; subsequent manual edits in the DigitalOcean console may be overwritten.
+
+The chart requires explicit `sourceRanges` when enabling public access. Use individual client addresses or trusted network CIDRs. If your public IP changes, update the list and run Helm upgrade again. Source filtering limits who can connect but does not encrypt traffic. HTTP transmits administration keys, prompts, and files in plaintext; configure HTTPS with a hostname and certificate before using sensitive data or expanding access. This option does not make the application a production multi-tenant service.
+
+Apply the override along with the image, registry, and storage values for your installation:
+
+```bash
+helm upgrade demo deploy/helm/agentberth \
+  --kubeconfig "$KUBECONFIG_PATH" --kube-context "$KUBE_CONTEXT" \
+  --namespace agentberth \
+  -f deploy/kubernetes/values-digitalocean.yaml \
+  -f /path/to/your-existing-values.yaml \
+  -f /path/to/your-public-access-values.yaml --wait --timeout 5m
+
+kubectl --kubeconfig "$KUBECONFIG_PATH" --context "$KUBE_CONTEXT" \
+  -n agentberth get service demo-agentberth-public
+```
+
+Open `http://EXTERNAL_IP` from an allowed network. The console uses the same cluster administration key, but browser login state is separate for each origin. `/healthz` should return `{"status":"ok"}`; unauthenticated `/v1/agents` should return HTTP 401. No port-forward process is required.
+
+If access fails, inspect Service events, ready API endpoints, the load balancer's forwarding/health-check ports, and your current public IP. Let the controller assign the NodePort instead of forwarding directly to 8080/8081 on a node.
+
+**Lifecycle:** deleting a managed `LoadBalancer` Service—including by disabling this option or uninstalling Helm—can delete the associated DigitalOcean load balancer, even if it was originally created manually. To retain it, follow DigitalOcean's documented disown/migration process first. Disabling the option is not a pause button for a load balancer you want to retain.
+
+References: [DigitalOcean load balancer configuration](https://docs.digitalocean.com/products/kubernetes/how-to/configure-load-balancers/), [load balancer migration and ownership](https://docs.digitalocean.com/products/kubernetes/how-to/migrate-load-balancers/).
+
+### Direct NodePort testing
+
+A LoadBalancer Service also allocates a NodePort. Find it with `kubectl -n agentberth get service demo-agentberth-public` using your explicit kubeconfig/context. For a listing such as `80:31089/TCP`, the node's public address is reachable at `http://NODE_PUBLIC_IP:31089` if its firewall permits that port. This bypasses the load balancer and does not require port-forwarding. The application still listens on 8080 inside its Pod.
+
+NodePort access is governed by the node firewall; a load balancer's client allowlist is not a substitute for restricting direct node access. This is a diagnostic route, not a stable endpoint: replacing the node can change its public IP, and recreating the Service can change the allocated port. It also uses plaintext HTTP unless TLS is configured separately.

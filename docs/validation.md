@@ -92,3 +92,14 @@ The DigitalOcean OpenRouter/custom-tool integration also passed: 3 model calls, 
 - Two initial auditor attempts returned empty model answers at the legacy 2,048-token allowance. The successful checks used the new configurable 8,192-token allowance; no automatic retries or silent model substitutions were added.
 - Final image deployed to DigitalOcean; verified all three example records, task suggestions, output allowances, and worker health. Live example runs were performed on Docker only. Release notes editor is bundled and schema-validated but was not live-tested in this increment.
 - Bundled examples are inserted only when absent, preserving existing administrator configuration. Older agents and run snapshots keep the default output allowance.
+
+## External access testing (2026-09-09)
+
+- Added an opt-in external Helm Service while retaining the internal API Service on port 8080. Default chart rendering remains private; explicit source ranges are required when enabled.
+- Helm lint, server-side validation of the external Service, and the Helm upgrade passed. DigitalOcean adopted the existing load balancer and assigned a NodePort, preserving its public IP.
+- One direct public node request through the NodePort returned HTTP 200 for `/healthz`. Subsequent public requests timed out, including console/auth checks; the user subsequently confirmed the console loads through the direct node URL in their regular browser. Automated client connectivity was inconsistent. No administration key was transmitted during automated checks.
+- The node health-check and API NodePort returned HTTP 200 from within the cluster. External load-balancer checks did not pass; end-to-end load-balancer access remains unverified. Its client allowlist was not broadened to a separately observed, potentially shared HTTP egress address.
+
+## HTTP-origin run submission (2026-09-09)
+
+Replaced the console's secure-context-only `crypto.randomUUID()` call with 16 random bytes from `crypto.getRandomValues()`, encoded as a 32-character hexadecimal idempotency key. TypeScript/Vite build and formatting passed. Exercised the actual key-generation expression with `randomUUID` unavailable and verified valid, distinct keys across 100 invocations. Updated Docker and DigitalOcean deployments. Authenticated browser execution was not completed because the available public-origin session was signed out.

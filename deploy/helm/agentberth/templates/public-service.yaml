@@ -1,0 +1,16 @@
+{{- if .Values.publicAccess.enabled }}
+{{- if not .Values.publicAccess.sourceRanges }}
+{{- fail "publicAccess.sourceRanges must explicitly list allowed client CIDRs" }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agentberth.name" . }}-public
+  annotations: {{ .Values.publicAccess.annotations | toJson }}
+spec:
+  type: LoadBalancer
+  loadBalancerSourceRanges: {{ .Values.publicAccess.sourceRanges | toJson }}
+  selector: {app: {{ include "agentberth.name" . }}-api}
+  ports:
+    - {name: http, port: {{ .Values.publicAccess.port }}, targetPort: 8080, protocol: TCP}
+{{- end }}

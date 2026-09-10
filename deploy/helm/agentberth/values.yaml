@@ -38,3 +38,9 @@ networkPolicy:
   # distribution-specific policy (DOKS uses Cilium toEntities: kube-apiserver).
   workerEgressRestricted: false
   kubernetesApiCIDRs: []
+# Optional external Service; internal API and sandbox traffic remain on port 8080.
+publicAccess:
+  enabled: false
+  port: 80
+  sourceRanges: []
+  annotations: {}

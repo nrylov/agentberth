@@ -428,7 +428,13 @@ function App() {
             additional_tools: additionalTools,
             disabled_tools: disabledTools,
           }),
-          headers: { "Idempotency-Key": crypto.randomUUID() },
+          // getRandomValues also works on HTTP origins; randomUUID requires a secure context.
+          headers: {
+            "Idempotency-Key": Array.from(
+              crypto.getRandomValues(new Uint8Array(16)),
+              (byte) => byte.toString(16).padStart(2, "0"),
+            ).join(""),
+          },
         },
       );
       setFiles([]);
