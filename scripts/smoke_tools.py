@@ -70,7 +70,13 @@ assert row["status"] == "draft"
 expect(409, lambda: request(f"/v1/tools/{id}/1.0.0/publish", method="POST"))
 agent = "tool-check-" + suffix
 request(
-    "/v1/agents", {"slug": agent, "name": "Tool integration check", "instructions": "Use the provided tools."}
+    "/v1/agents",
+    {
+        "slug": agent,
+        "name": "Tool integration check",
+        "example_task": "Run the fixed demonstration to verify built-in tool execution and save report.md. Select OpenRouter to process arbitrary data.",
+        "instructions": "Use the provided tools.",
+    },
 )
 path = f"/v1/deployments/{agent}/runs"
 body = {
@@ -122,6 +128,7 @@ if args.live:
         "/v1/agents/" + agent,
         {
             "name": "Tool integration check",
+            "example_task": "Use Python to create sample.csv with columns name,score and rows Ada,10 and Lin,20. Read it back, calculate the average score, and write the row count, column names, and average to report.md.",
             "instructions": "Use the requested tools exactly. Return a concise answer.",
             "provider": "openrouter",
         },

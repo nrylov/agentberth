@@ -47,6 +47,7 @@ def main():
         {
             "slug": slug,
             "name": "Scheduled report example",
+            "example_task": "Generate the scheduled demonstration report for 12, 18, and 24. Save the total and average to report.md.",
             "provider": "demo",
             "instructions": "Create a report using the available tools.",
             "tools": ["python", "write_file", "read_file"],

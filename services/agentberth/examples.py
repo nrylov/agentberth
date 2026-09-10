@@ -58,3 +58,38 @@ def configs():
             tools=[reference(n) for n in example.get("tool_names", ["python", "write_file", "read_file"])],
         )
         yield example["slug"], config
+
+
+LEGACY_TASKS = {
+    "harbor-guide": (
+        "Harbor guide",
+        "Run the fixed demonstration: calculate the total and average of 12, 18, and 24, and save report.md.",
+    ),
+    "scheduled-example-": (
+        "Scheduled report example",
+        "Generate the scheduled demonstration report for 12, 18, and 24. Save the total and average to report.md.",
+    ),
+    "tool-check-": (
+        "Tool integration check",
+        "Use Python to create sample.csv with columns name,score and rows Ada,10 and Lin,20. Read it back, calculate the average score, and write the row count, column names, and average to report.md.",
+    ),
+    "kube-check-": (
+        "Kubernetes integration check",
+        "Run the fixed demonstration in a Kubernetes sandbox and save report.md with the total and average of 12, 18, and 24.",
+    ),
+    "smoke-": (
+        "Smoke test",
+        "Run the fixed demonstration and generate report.md to verify task execution and artifact downloads.",
+    ),
+}
+
+
+def legacy_task(slug, name, provider="openrouter"):
+    for prefix, (expected_name, task) in LEGACY_TASKS.items():
+        if name == expected_name and (
+            slug == prefix if prefix == "harbor-guide" else slug.startswith(prefix)
+        ):
+            if prefix == "tool-check-" and provider == "demo":
+                return "Run the fixed demonstration to verify built-in tool execution and save report.md. Select OpenRouter to process arbitrary data."
+            return task
+    return None

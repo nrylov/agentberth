@@ -59,6 +59,7 @@ slug = "smoke-" + uuid.uuid4().hex[:8]
 config = {
     "slug": slug,
     "name": "Smoke test",
+    "example_task": "Run the fixed demonstration and generate report.md to verify task execution and artifact downloads.",
     "instructions": "Use tools to solve the task.",
     "provider": "demo",
     "tools": ["python", "write_file", "read_file"],

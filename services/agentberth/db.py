@@ -118,13 +118,24 @@ def initialize():
             ("harbor-guide", demo["name"], Jsonb(demo)),
         )
 
-        from agentberth.examples import configs
+        from agentberth.examples import configs, legacy_task
 
         for slug, config in configs():
             conn.execute(
                 "INSERT INTO agents(slug,name,config) VALUES (%s,%s,%s) ON CONFLICT DO NOTHING",
                 (slug, config["name"], Jsonb(config)),
             )
+
+        # Backfill pre-suggestion fixtures only. Preserve explicit edits, including an empty suggestion.
+        for row in conn.execute(
+            "SELECT slug,name,config->>'provider' AS provider FROM agents WHERE NOT config ? 'example_task'"
+        ).fetchall():
+            task = legacy_task(row["slug"], row["name"], row["provider"])
+            if task:
+                conn.execute(
+                    "UPDATE agents SET config=jsonb_set(config,'{example_task}',%s) WHERE slug=%s",
+                    (Jsonb(task), row["slug"]),
+                )
 
 
 def new_id():

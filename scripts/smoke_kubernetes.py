@@ -168,6 +168,7 @@ request(
     {
         "slug": slug,
         "name": "Kubernetes integration check",
+        "example_task": "Run the fixed demonstration in a Kubernetes sandbox and save report.md with the total and average of 12, 18, and 24.",
         "instructions": "Run demo.",
         "timeout_seconds": 30,
     },

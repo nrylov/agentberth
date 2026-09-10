@@ -34,3 +34,15 @@ def test_output_allowance_is_bounded_and_backwards_compatible():
             AgentConfig(name="Invalid", instructions="Help", max_output_tokens=limit)
     for _, config in configs():
         assert AgentConfig(**config).max_output_tokens == 8192
+
+
+def test_legacy_fixture_tasks_are_scoped_and_distinct():
+    from agentberth.examples import LEGACY_TASKS, legacy_task
+
+    for prefix, (name, task) in LEGACY_TASKS.items():
+        slug = prefix if prefix == "harbor-guide" else prefix + "12345678"
+        assert legacy_task(slug, name) == task
+        assert legacy_task(slug, "My custom agent") is None
+    assert legacy_task("custom-agent", "Smoke test") is None
+    assert "fixed demonstration" in legacy_task("tool-check-12345678", "Tool integration check", "demo")
+    assert len({task for _, task in LEGACY_TASKS.values()}) == len(LEGACY_TASKS)

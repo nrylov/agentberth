@@ -103,3 +103,9 @@ The DigitalOcean OpenRouter/custom-tool integration also passed: 3 model calls, 
 ## HTTP-origin run submission (2026-09-09)
 
 Replaced the console's secure-context-only `crypto.randomUUID()` call with 16 random bytes from `crypto.getRandomValues()`, encoded as a 32-character hexadecimal idempotency key. TypeScript/Vite build and formatting passed. Exercised the actual key-generation expression with `randomUUID` unavailable and verified valid, distinct keys across 100 invocations. Updated Docker and DigitalOcean deployments. Authenticated browser execution was not completed because the available public-origin session was signed out.
+
+## Legacy example suggestions (2026-09-09)
+
+- 61 tests passed, plus Ruff. Fixture matching checks cover recognized names/slugs, unrelated agents, distinct suggestions, and the demo-provider tool-check variant.
+- Updated Docker and DigitalOcean (Helm revision 10). Database checks confirmed saved suggestions for all four reported cluster fixtures and Harbor guide. The existing richer OpenRouter suggestions remain present.
+- Startup backfills only absent suggestion keys for recognized fixtures. Custom agents and explicitly empty suggestions are preserved; existing run and schedule snapshots are unchanged. Example scripts now include suggestions when creating fixtures.

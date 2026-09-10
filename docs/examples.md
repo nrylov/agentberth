@@ -24,6 +24,8 @@ The bundled configurations live in `services/agentberth/examples.py`. They are i
 
 **Harbor guide** remains a no-credit, deterministic demonstration. Older entries such as Smoke test, Tool integration check, Recovery test, and Scheduled report example are integration-test fixtures, not different AI capabilities. Demo-provider agents always execute the fixed demonstration regardless of the prompt. They are retained to preserve existing runs and references.
 
+At startup, Agentberth fills in missing suggestions for recognized Harbor guide, Scheduled report example, Tool integration check, Kubernetes integration check, and Smoke test fixtures. Existing suggestions—including explicitly empty ones—and custom agents are preserved. The tool-check suggestion describes CSV processing when configured for OpenRouter and the fixed demonstration when configured for the demo provider. Refresh the console after upgrading to load these suggestions.
+
 ## Verify the analytical examples
 
 From the repository root:
