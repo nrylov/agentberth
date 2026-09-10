@@ -126,10 +126,15 @@ Loading a changed image under the same local tag does not restart Pods. Prefer n
 
 ## MicroK8s
 
+For a fresh Ubuntu 24.04 VM with an attached data volume, follow the [complete Ubuntu/MicroK8s installation guide](ubuntu-microk8s.md). It includes SSH access, volume-backed PostgreSQL, registry-free image transfer, and direct NodePort testing.
+
 On your MicroK8s host, enable DNS and a suitable storage provisioner. For a single-node test:
 
 ```bash
-microk8s enable dns hostpath-storage
+microk8s enable dns
+microk8s enable rbac
+microk8s enable hostpath-storage
+microk8s kubectl -n kube-system rollout status deployment/hostpath-provisioner --timeout=120s
 ```
 
 Export a kubeconfig using `microk8s config`, protect that file, and use its actual context name. Use the same registry images and credential setup, then install with `-f deploy/kubernetes/values-microk8s.yaml`. Create pull Secrets in both namespaces for private registries. Alternatively, import compatible images into MicroK8s containerd using the distribution's image import workflow.

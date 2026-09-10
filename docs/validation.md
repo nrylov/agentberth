@@ -117,3 +117,12 @@ Replaced the console's secure-context-only `crypto.randomUUID()` call with 16 ra
 - Docker API smoke checks passed. Fault injection verified timeout, cancellation, token revocation, input expiry, cancellation without interrupting concurrent peers, and recovery cleanup of multiple interrupted sandboxes without replay.
 - Seven isolated PostgreSQL scheduler integration checks passed, including queue capacity/idempotency, concurrent scheduler ticks, no-overlap, and pinned snapshots.
 - Both deployments use the default three concurrent runs and 50 waiting slots. Four/six-run deployment settings are configurable; limits 1 and 6 were tested at coordinator level, while infrastructure batch tests used 3. Kubernetes crash recovery and GUI interaction were not retested in this increment; the frontend production build passed.
+
+## Ubuntu VM / MicroK8s provisioning (2026-09-10)
+
+- Connected to the user's Ubuntu 24.04 VM running MicroK8s Kubernetes v1.35.6. The PostgreSQL claim was pending because `hostpath-storage` was disabled and no provisioner Deployment existed. Enabling the addon bound the existing 5 GiB claim without recreating storage. Its path is beneath the attached ext4 volume.
+- Enabled RBAC, which was disabled. Verified the worker can create sandbox Jobs and cannot read control-namespace Secrets. Helm revision 2 deployed successfully; PostgreSQL, API, and worker became ready.
+- API smoke tests and a five-task demo batch passed: peak concurrency three, waiting tasks drained, and all five run-specific reports downloaded. No provider credits were used.
+- Network isolation probe passed: sandbox API access worked; database, Kubernetes API, metadata, and direct internet connections were blocked; no service-account token was mounted. Cancellation and deadline checks advanced successfully.
+- Forced worker deletion did not recover within the test deadline: PostgreSQL retained the dead worker's idle TCP session and advisory lock. After verifying no old worker process remained, the exact stale session was terminated manually and the replacement worker restarted. This is a known recovery limitation, not a passing automatic crash-recovery test.
+- Verified an enabled UUID-based systemd volume mount and MicroK8s mount dependencies. Reboot persistence and public browser access were not tested during this repair.
