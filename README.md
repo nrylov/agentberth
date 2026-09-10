@@ -30,6 +30,8 @@ Agentberth is built on the belief that you should own your data and control the 
 - **Execution visibility:** inspect persisted events, stream progress with server-sent events, review token usage and reported cost, and cancel pending or running tasks.
 - **Reproducible examples:** start with a deterministic demonstration without model credentials, then explore multi-step OpenRouter agents for data analysis and planning.
 
+Concurrency is configurable for both Docker and Kubernetes: one coordinator launches isolated task sandboxes on demand, up to a default of three concurrent runs, with excess tasks queued. See [execution limits and the concurrent report example](docs/scheduling.md#configuring-concurrency).
+
 ## Quick start
 
 **Requirements:** Docker with Compose v2 or later, configured to run Linux containers. Docker Desktop supports the macOS setup. The initial demonstration requires no model API key or additional language runtimes.

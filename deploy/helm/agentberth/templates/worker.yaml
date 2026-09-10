@@ -24,6 +24,8 @@ spec:
           securityContext:
             {{- include "agentberth.containerSecurity" . | nindent 12 }}
           env:
+            - {name: MAX_CONCURRENT_RUNS, value: {{ .Values.execution.maxConcurrentRuns | quote }}}
+            - {name: MAX_QUEUED_RUNS, value: {{ .Values.execution.maxQueuedRuns | quote }}}
             - {name: EXECUTION_BACKEND, value: kubernetes}
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: {{ .Values.existingSecret }}, key: DATABASE_URL}}

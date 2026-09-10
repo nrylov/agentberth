@@ -22,6 +22,8 @@ services:
       context: .
       target: platform
     environment:
+      MAX_CONCURRENT_RUNS: ${MAX_CONCURRENT_RUNS:-3}
+      MAX_QUEUED_RUNS: ${MAX_QUEUED_RUNS:-50}
       DATABASE_URL: postgresql://agentberth:local-development-only@postgres/agentberth
       ADMIN_KEY: ${AGENTBERTH_ADMIN_KEY:-agentberth-local}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
@@ -58,6 +60,8 @@ services:
     user: "0:0"
     command: [python, -m, agentberth.worker]
     environment:
+      MAX_CONCURRENT_RUNS: ${MAX_CONCURRENT_RUNS:-3}
+      MAX_QUEUED_RUNS: ${MAX_QUEUED_RUNS:-50}
       DATABASE_URL: postgresql://agentberth:local-development-only@postgres/agentberth
       RUNTIME_IMAGE: agentberth-runtime:local
       SANDBOX_NETWORK: agentberth_sandbox
@@ -71,7 +75,7 @@ services:
       runtime-image:
         condition: service_completed_successfully
     restart: unless-stopped
-    stop_grace_period: 15s
+    stop_grace_period: 90s
 
 networks:
   database:

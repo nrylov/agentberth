@@ -4,7 +4,7 @@ Agentberth stores its queue and schedules in PostgreSQL. The same API, GUI, and 
 
 ## Queue behavior
 
-Every `POST /v1/deployments/{slug}/runs` already queues a task and returns HTTP 202. Submit several requests without waiting for completion to queue a batch. The worker runs one sandbox at a time, oldest queued task first. Queued tasks survive API and worker restarts. Up to 50 tasks can wait; additional submissions return HTTP 429. Running work does not count toward those 50 slots. An idempotent replay still returns the original run when the queue is full.
+Every `POST /v1/deployments/{slug}/runs` already queues a task and returns HTTP 202. Submit several requests without waiting for completion to queue a batch. One coordinator starts up to `MAX_CONCURRENT_RUNS` isolated sandboxes concurrently (default 3), taking the oldest queued task whenever a slot becomes available. Completion order can differ from submission order. Queued tasks survive API and worker restarts. Up to `MAX_QUEUED_RUNS` tasks can wait (default 50); additional submissions return HTTP 429. Running work does not count toward the waiting queue limit. An idempotent replay still returns the original run when the queue is full.
 
 The **Schedules** menu opens the queue and scheduling page, which shows queue counts, pending tasks, and cancellation controls. Run history and the playground retain their existing run details, events, input-file handling, and output downloads. The pending list uses the latest 100 runs; queue counts cover all runs. Cancel via the GUI or `POST /v1/runs/{id}/cancel`. Queued cancellation prevents execution and expires uploads; running cancellation asks the worker to stop the sandbox.
 
@@ -129,3 +129,42 @@ python3 scripts/example_schedules.py --cleanup
 Database integration checks cover concurrent ticks, transaction rollback, cadence, overlap, queue capacity/idempotent replay, pause/resume/delete, one-time schedules, and pinned configuration. CI runs these checks and the end-to-end example; Kubernetes CI runs the public example too.
 
 Rebuild with `docker compose up -d --build`, or deploy a new platform image through the [Kubernetes guide](kubernetes.md). No runtime-image or Helm value change is required for scheduling. API startup adds the schedule table and run metadata columns; the worker waits for the new schema. Back up PostgreSQL before upgrades. A rollback to an older worker leaves schedules stored but stops evaluating them.
+
+## Configuring concurrency
+
+The concurrency limit is configurable, not fixed at three. Docker and Kubernetes use the same coordinator and queue semantics. Each active run gets its own container or Kubernetes Job/pod; each slot is released only after sandbox teardown and terminal-state persistence. Pods awaiting scheduling or image pulls also occupy slots. Additional tasks remain in PostgreSQL until a slot is available.
+
+For Docker Compose, set these values in `.env`:
+
+```dotenv
+MAX_CONCURRENT_RUNS=6
+MAX_QUEUED_RUNS=50
+```
+
+Apply with `docker compose up -d`. Both the API and worker receive the same settings. For Kubernetes, add these values to your Helm overrides and apply your normal Helm upgrade:
+
+```yaml
+execution:
+  maxConcurrentRuns: 6
+  maxQueuedRuns: 50
+```
+
+Both settings must be positive integers. Raising concurrency increases resource demand: each sandbox has a 256 MiB memory limit, in addition to the platform and database. Kubernetes can leave pods pending when resources are unavailable. This setting does not add cluster nodes or worker replicas. Keep the worker Deployment at one replica.
+
+Settings take effect after the API and worker restart. Wait for active work to finish before changing them: a worker shutdown stops its active sandboxes and marks those runs failed without retrying; queued runs are retained. Reducing the queue limit preserves existing queued work and prevents new admissions until the backlog falls below the new limit.
+
+`GET /v1/queue` returns `queued`, `running`, `capacity` (waiting queue limit), and `max_concurrent_runs`. The Queue & schedules page displays both limits. The playground allows **Run another task** while the current task is active; it switches to the new run, and earlier runs remain available in Run history. Example response:
+
+```json
+{"queued": 2, "running": 3, "capacity": 50, "max_concurrent_runs": 3}
+```
+
+## Concurrent report example
+
+On an idle development installation with schedules paused, run:
+
+```bash
+python3 scripts/example_concurrency.py
+```
+
+For another installation, use `--base-url` and set `AGENTBERTH_ADMIN_KEY` in your shell. The script submits two more tasks than the configured concurrency limit (five at the default), prints running/queued counts, verifies the concurrency ceiling and overlapping runs using persisted timestamps, and downloads every report to verify its run-specific contents. It uses the demo provider and spends no LLM credits. Short tasks may finish between queue polls; persisted timestamps provide the final overlap check. The example agent and run history remain available in the GUI.

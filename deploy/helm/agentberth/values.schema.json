@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "execution": {
+      "type": "object",
+      "required": ["maxConcurrentRuns", "maxQueuedRuns"],
+      "properties": {
+        "maxConcurrentRuns": {"type": "integer", "minimum": 1},
+        "maxQueuedRuns": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

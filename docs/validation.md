@@ -109,3 +109,11 @@ Replaced the console's secure-context-only `crypto.randomUUID()` call with 16 ra
 - 61 tests passed, plus Ruff. Fixture matching checks cover recognized names/slugs, unrelated agents, distinct suggestions, and the demo-provider tool-check variant.
 - Updated Docker and DigitalOcean (Helm revision 10). Database checks confirmed saved suggestions for all four reported cluster fixtures and Harbor guide. The existing richer OpenRouter suggestions remain present.
 - Startup backfills only absent suggestion keys for recognized fixtures. Custom agents and explicitly empty suggestions are preserved; existing run and schedule snapshots are unchanged. Example scripts now include suggestions when creating fixtures.
+
+## Configurable concurrent execution (2026-09-09)
+
+- 70 unit/contract tests passed, including real-thread coordinator checks at concurrency limits 1, 3, and 6, cleanup failure handling, coordinator failure shutdown, and invalid configuration. Ruff, TypeScript/Vite build, and Helm lint passed. Helm rejected a zero concurrency limit as expected.
+- Docker and DigitalOcean Kubernetes (Helm revision 11) each completed the five-task batch with three overlapping runs and two waiting tasks. Persisted run timestamps confirmed the concurrency ceiling; every run-specific report was downloaded and verified. No LLM credits were used. Kubernetes task Jobs were removed and both platform Deployments were ready after completion.
+- Docker API smoke checks passed. Fault injection verified timeout, cancellation, token revocation, input expiry, cancellation without interrupting concurrent peers, and recovery cleanup of multiple interrupted sandboxes without replay.
+- Seven isolated PostgreSQL scheduler integration checks passed, including queue capacity/idempotency, concurrent scheduler ticks, no-overlap, and pinned snapshots.
+- Both deployments use the default three concurrent runs and 50 waiting slots. Four/six-run deployment settings are configurable; limits 1 and 6 were tested at coordinator level, while infrastructure batch tests used 3. Kubernetes crash recovery and GUI interaction were not retested in this increment; the frontend production build passed.

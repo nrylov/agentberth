@@ -5,6 +5,7 @@ from datetime import timedelta
 from psycopg.types.json import Jsonb
 
 from agentberth import db
+from agentberth.settings import MAX_QUEUED_RUNS
 
 
 def next_occurrence(due, interval_seconds, now):
@@ -20,7 +21,10 @@ def tick():
         # Shared with every API producer so the global queue bound is atomic.
         conn.execute("SELECT pg_advisory_xact_lock(71004)")
         now = conn.execute("SELECT now() AS value").fetchone()["value"]
-        slots = 50 - conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"]
+        slots = (
+            MAX_QUEUED_RUNS
+            - conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"]
+        )
         due = conn.execute(
             "SELECT * FROM schedules WHERE enabled AND next_run_at <= %s ORDER BY next_run_at,id FOR UPDATE",
             (now,),

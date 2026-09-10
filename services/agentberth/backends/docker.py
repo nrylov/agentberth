@@ -13,6 +13,9 @@ class DockerBackend:
     def __init__(self):
         self.client = docker.from_env(timeout=10)
 
+    def close(self):
+        self.client.close()
+
     def submit(self, spec: RunSpec) -> str:
         container = self.client.containers.create(
             os.getenv("RUNTIME_IMAGE", "agentberth-runtime:local"),

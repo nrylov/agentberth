@@ -17,7 +17,7 @@ The runtime uses Python plus a locked JSON Schema validator; custom handlers tar
 1. Authenticate the request with the local administration key.
 2. Resolve the endpoint slug and copy its current configuration, version, and model into a run record.
 3. Atomically record the run and the `run.queued` event. Return HTTP 202.
-4. The single worker claims a queued row using a transaction and row lock.
+4. The single coordinator claims queued rows using transactions and row locks, up to the configured concurrent-run limit. Each execution thread owns a separate backend client and database connections.
 5. Generate a random token; store its SHA-256 hash in PostgreSQL. Give the raw token only to that run's container.
 6. Create a non-root, resource-limited container. The runtime fetches its input/configuration from the internal API.
 7. In real-provider mode, the runtime asks the gateway for a model response, executes requested tools, and sends tool results back on the next model turn. Provider-specific reasoning metadata is preserved in the in-memory conversation, but not emitted in the activity log.
@@ -42,7 +42,7 @@ Schema setup is additive `CREATE TABLE IF NOT EXISTS` under an advisory lock. Be
 
 ## Scheduling and failure semantics
 
-One worker owns a database advisory lock. A second worker exits instead of concurrently reconciling the same backend resources. The worker reports a heartbeat every scheduling/monitor cycle.
+One worker owns a database advisory lock. A second worker exits instead of concurrently reconciling the same backend resources. The coordinator reports a heartbeat and ticks schedules independently of sandbox execution. It admits up to `MAX_CONCURRENT_RUNS` concurrent runs (default 3). A slot stays occupied through cleanup; a cleanup or database failure stops admission and triggers restart reconciliation.
 
 On restart, the worker first removes Agentberth-labelled orphan containers, then marks previously running jobs failed. Queued runs remain queued and can execute. Failed/running work is never automatically replayed, because tools may already have produced side effects. Clients choose whether to submit a new invocation.
 
@@ -74,4 +74,4 @@ The registry table is created additively under the existing startup schema lock.
 
 ## Persistent scheduling
 
-The active worker materializes due PostgreSQL schedules during its heartbeat, both while idle and executing a sandbox. Immutable schedule snapshots reuse the normal run protocol. A shared advisory transaction lock bounds all run producers to 50 queued tasks; run insertion, event creation, and advancement of the schedule commit together. Each schedule has at most one queued/running occurrence. A unique `(schedule_id, scheduled_for)` index protects occurrence identity. See [scheduling](scheduling.md) for cadence, downtime, pause, and input-file semantics.
+The active worker materializes due PostgreSQL schedules during its heartbeat, both while idle and executing a sandbox. Immutable schedule snapshots reuse the normal run protocol. A shared advisory transaction lock bounds all run producers to `MAX_QUEUED_RUNS` queued tasks (default 50); run insertion, event creation, and advancement of the schedule commit together. Each schedule has at most one queued/running occurrence. A unique `(schedule_id, scheduled_for)` index protects occurrence identity. See [scheduling](scheduling.md) for cadence, downtime, pause, and input-file semantics.

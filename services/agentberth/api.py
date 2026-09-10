@@ -1,3 +1,4 @@
+from agentberth.settings import MAX_CONCURRENT_RUNS, MAX_QUEUED_RUNS
 import asyncio
 import io
 import zipfile
@@ -652,7 +653,10 @@ SCHEDULE_FIELDS = (
 
 def queue_capacity(conn):
     conn.execute("SELECT pg_advisory_xact_lock(71004)")
-    if conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"] >= 50:
+    if (
+        conn.execute("SELECT count(*) AS n FROM runs WHERE status='queued'").fetchone()["n"]
+        >= MAX_QUEUED_RUNS
+    ):
         raise HTTPException(429, "The queue is full. Try again after some runs finish.")
 
 
@@ -663,7 +667,7 @@ def queue_status():
             "SELECT count(*) FILTER (WHERE status='queued') AS queued, "
             "count(*) FILTER (WHERE status='running') AS running FROM runs"
         ).fetchone()
-        return {**row, "capacity": 50}
+        return {**row, "capacity": MAX_QUEUED_RUNS, "max_concurrent_runs": MAX_CONCURRENT_RUNS}
 
 
 @app.get("/v1/schedules", response_model=list[ScheduleRecord], dependencies=[Depends(admin)])

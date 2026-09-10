@@ -12,7 +12,12 @@ export type Schedule = {
   enabled: boolean;
   last_run_id: string | null;
 };
-export type Queue = { queued: number; running: number; capacity: number };
+export type Queue = {
+  queued: number;
+  running: number;
+  capacity: number;
+  max_concurrent_runs: number;
+};
 type Api = <T>(path: string, options?: RequestInit) => Promise<T>;
 type Props = {
   schedules: Schedule[];
@@ -77,8 +82,9 @@ export function SchedulesView({
           <h1>Queue & schedules</h1>
           <p>
             {queue?.queued ?? 0} / {queue?.capacity ?? 50} queued ·{" "}
-            {queue?.running ?? 0} running. Tasks execute one at a time in
-            submission order.
+            {queue?.running ?? 0} / {queue?.max_concurrent_runs ?? "—"} running.
+            Queued tasks start in submission order as execution slots become
+            available.
           </p>
         </div>
       </div>

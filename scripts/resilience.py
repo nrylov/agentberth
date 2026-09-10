@@ -129,3 +129,30 @@ try:
 finally:
     subprocess.run(["docker", "rm", "-f", handle], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 print("PASS: worker restart removes orphan and fails interrupted run without replay")
+
+# With concurrent admission, cancelling one sandbox must not stop its peers.
+limit = request("/v1/queue")["max_concurrent_runs"]
+if limit >= 2:
+    batch = []
+    try:
+        for _ in range(min(limit, 3)):
+            batch.append(paused_run(slug))
+        first, _ = batch[0]
+        request(f"/v1/runs/{first}/cancel", {})
+        assert terminal(first)["status"] == "cancelled"
+        for peer, _handle in batch[1:]:
+            assert request("/v1/runs/" + peer)["status"] == "running"
+            assert docker("ps", "-q", "--filter", f"label=agentberth.run={peer}")
+        docker("compose", "kill", "-s", "SIGKILL", "worker")
+        docker("compose", "up", "-d", "--no-deps", "worker")
+        for peer, _handle in batch[1:]:
+            assert terminal(peer)["status"] == "failed"
+            assert not docker("ps", "-aq", "--filter", f"label=agentberth.run={peer}")
+    finally:
+        for _, handle in batch:
+            subprocess.run(
+                ["docker", "rm", "-f", handle], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+    print(
+        "PASS: cancellation preserves concurrent peers; restart cleans all remaining sandboxes and expires uploads"
+    )

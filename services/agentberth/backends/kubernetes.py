@@ -30,6 +30,9 @@ class KubernetesBackend:
         self.jobs = f"/apis/batch/v1/namespaces/{self.namespace}/jobs"
         self.core = f"/api/v1/namespaces/{self.namespace}"
 
+    def close(self):
+        self.client.close()
+
     def request(self, method, path, body=None, params=None, missing_ok=False):
         # Read each time: projected service-account tokens rotate.
         response = self.client.request(

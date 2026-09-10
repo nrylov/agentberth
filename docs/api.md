@@ -89,7 +89,7 @@ Input, tool arguments/results, and artifacts can contain user data. Provider-int
 - `429`: local queue or runtime step/event limit reached.
 - `502`: upstream model call failed (internal gateway).
 
-Limits: 8,000 input characters; 1–12 model calls; 2,048 completion tokens per call including any provider reasoning; 10–300 seconds per run; up to 8 tool calls per model turn; 10 seconds per Python tool; 50 queued runs; 600 KB HTTP request bodies, except run submissions/internal results (6 MB). Prompt/context growth contributes to cost across turns.
+Limits: 8,000 input characters; 1–12 model calls; 2,048 completion tokens per call including any provider reasoning; 10–300 seconds per run; up to 8 tool calls per model turn; 10 seconds per Python tool; configurable concurrent runs (default 3) and queued runs (default 50); 600 KB HTTP request bodies, except run submissions/internal results (6 MB). Prompt/context growth contributes to cost across turns.
 
 Internal `/internal/runs/{id}/...` routes are reserved for the runtime and require a separate run-scoped token. They are not a public client integration surface.
 
@@ -123,7 +123,7 @@ Supported archive uploads automatically select/invoke the archive tool. `GET /v1
 
 ## Queue and schedules
 
-`GET /v1/queue` reports queue counts/capacity. `GET` and `POST /v1/schedules` list/create one-time or fixed-interval schedules; `PATCH /v1/schedules/{id}` pauses/resumes and `DELETE` removes future scheduling while preserving runs. All require administration authentication. Run responses include nullable `schedule_id` and `scheduled_for`. See [the complete scheduling contract and runnable example](scheduling.md).
+`GET /v1/queue` reports `queued`, `running`, `capacity` (waiting limit), and `max_concurrent_runs`. `GET` and `POST /v1/schedules` list/create one-time or fixed-interval schedules; `PATCH /v1/schedules/{id}` pauses/resumes and `DELETE` removes future scheduling while preserving runs. All require administration authentication. Run responses include nullable `schedule_id` and `scheduled_for`. See [the complete scheduling contract and runnable example](scheduling.md).
 
 ## Suggested agent tasks
 

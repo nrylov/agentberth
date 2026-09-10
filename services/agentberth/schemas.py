@@ -218,6 +218,7 @@ class ScheduleRecord(BaseModel):
 
 
 class QueueStatus(BaseModel):
+    max_concurrent_runs: int
     queued: int
     running: int
     capacity: int

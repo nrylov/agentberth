@@ -7,7 +7,7 @@ The Kubernetes worker runs **inside the cluster** using its service account. It 
 ## Architecture and limits
 
 - One API Deployment serves the GUI and public API. Only this component receives `LLM_API_KEY`.
-- One worker Deployment holds the database advisory lock and processes one run at a time. Its namespace-scoped role manages Jobs, Pods (read-only), and run token Secrets in a dedicated sandbox namespace. It has no permission to read the control namespace's provider/database Secret.
+- One worker Deployment holds the database advisory lock and coordinates up to `execution.maxConcurrentRuns` concurrent task pods (default 3). Its namespace-scoped role manages Jobs, Pods (read-only), and run token Secrets in a dedicated sandbox namespace. It has no permission to read the control namespace's provider/database Secret.
 - PostgreSQL runs in a StatefulSet with a PVC. External PostgreSQL is supported by disabling `postgres.enabled` and supplying a corresponding `DATABASE_URL`.
 - Each run gets a Job, a short-lived token Secret owned by that Job, and memory-backed workspaces. Agent Pods have no service-account token, host mounts, elevated capabilities, or writable root filesystem. They run as UID 10001 with RuntimeDefault seccomp.
 - Job retries are disabled (`backoffLimit: 0`, `restartPolicy: Never`); the deadline includes startup/scheduling. Kubernetes may still duplicate execution under exceptional failures; this is not an exactly-once guarantee.
@@ -15,7 +15,7 @@ The Kubernetes worker runs **inside the cluster** using its service account. It 
 - Inputs expire and credentials are revoked even if cleanup needs reconciliation. Cluster/API outages or partitioned nodes can delay confirmed teardown. Kubernetes object deletion is not proof of physical erasure on an unreachable machine.
 - Runtime memory is 256 MiB, workspace 64 MiB, temporary files 16 MiB. CPU request/limit, node selectors, tolerations, and optional RuntimeClass are configurable. There is no portable per-Pod PID limit in the chart; configure node/runtime PID limits where supported. RuntimeClass requires a compatible runtime already installed on the nodes.
 
-This is a single-worker, single-database preview, not a highly available installation. On a 4 GiB test node, keep the default resources and one active run. Check actual allocatable resources and pressure rather than assuming all node RAM is available to workloads.
+This is a single-worker, single-database preview, not a highly available installation. The default concurrency is three; lower it for constrained workloads or raise it after measuring resource use on your node. Check actual allocatable resources and pressure rather than assuming all node RAM is available to workloads.
 
 ## Prerequisites
 
@@ -268,3 +268,15 @@ References: [DigitalOcean load balancer configuration](https://docs.digitalocean
 A LoadBalancer Service also allocates a NodePort. Find it with `kubectl -n agentberth get service demo-agentberth-public` using your explicit kubeconfig/context. For a listing such as `80:31089/TCP`, the node's public address is reachable at `http://NODE_PUBLIC_IP:31089` if its firewall permits that port. This bypasses the load balancer and does not require port-forwarding. The application still listens on 8080 inside its Pod.
 
 NodePort access is governed by the node firewall; a load balancer's client allowlist is not a substitute for restricting direct node access. This is a diagnostic route, not a stable endpoint: replacing the node can change its public IP, and recreating the Service can change the allocated port. It also uses plaintext HTTP unless TLS is configured separately.
+
+## Concurrent task pods
+
+The worker remains one coordinator replica and creates a separate Job/pod for each task. Set `execution.maxConcurrentRuns` in your Helm overrides to control concurrent runs (default 3); set `execution.maxQueuedRuns` to control waiting tasks (default 50). Both accept any positive integer. For example:
+
+```yaml
+execution:
+  maxConcurrentRuns: 6
+  maxQueuedRuns: 50
+```
+
+Apply these with the same release, values files, and image overrides used for your installation. Wait for active tasks to finish before upgrading the worker. Increasing the limit does not scale the node pool: the cluster must have enough capacity for the additional sandbox pods. Worker replicas must remain at one. See [concurrency configuration and the batch example](scheduling.md#configuring-concurrency) for shared Docker/API behavior and validation instructions.

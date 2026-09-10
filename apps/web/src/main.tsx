@@ -804,7 +804,6 @@ function App() {
                               (e.metaKey || e.ctrlKey) &&
                               e.key === "Enter" &&
                               !busy &&
-                              !running &&
                               input.trim() &&
                               settings?.worker_online
                             ) {
@@ -819,7 +818,7 @@ function App() {
                         <RunFiles
                           files={files}
                           onChange={setFiles}
-                          disabled={busy || running}
+                          disabled={busy}
                           onError={setError}
                         />
                         <div className="tool-label">
@@ -915,10 +914,7 @@ function App() {
                         <button
                           className="primary launch"
                           disabled={
-                            busy ||
-                            running ||
-                            !input.trim() ||
-                            !settings?.worker_online
+                            busy || !input.trim() || !settings?.worker_online
                           }
                           onClick={() => void launch()}
                         >
@@ -927,7 +923,7 @@ function App() {
                           ) : (
                             <Play size={16} fill="currentColor" />
                           )}{" "}
-                          {running ? "Run in progress" : "Run agent"}
+                          {running ? "Run another task" : "Run agent"}
                           <span title="Command or Control + Enter">
                             ⌘/Ctrl ↵
                           </span>

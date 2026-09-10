@@ -9,6 +9,10 @@
 | Kubernetes with VM-backed RuntimeClass | Planned | Requires a supported VM runtime installed on compatible nodes |
 | Direct Firecracker | Deferred | Requires Linux/KVM and a separate host lifecycle implementation |
 
+## Concurrent execution: implemented
+
+One coordinator manages a configurable number of isolated task sandboxes (default three), with excess work retained in the PostgreSQL queue. Docker and Kubernetes share the same limits and API. Multiple worker replicas, worker autoscaling, and automatic node scaling remain future work. See [configuration and the batch example](scheduling.md#configuring-concurrency).
+
 ## Milestone 1: local vertical slice
 
 - One-command Compose setup and a no-key demo.

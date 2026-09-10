@@ -4,6 +4,9 @@ import secrets
 import signal
 import time
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+
+from agentberth.settings import MAX_CONCURRENT_RUNS
 
 from agentberth import db, scheduler
 from agentberth.backends import RunSpec, BackendError, CleanupError, create_backend
@@ -28,15 +31,15 @@ def heartbeat(lock):
         last_schedule_tick = time.monotonic()
 
 
-def execute(backend, row, token, lock):
+def execute(backend, row, token):
     handle = None
     status, error = "failed", "Worker could not start the sandbox."
+    cleanup_uncertain = False
     start = time.monotonic()
     try:
         handle = backend.submit(RunSpec(row["id"], token, row["spec"]["timeout_seconds"]))
         logging.info("Started sandbox for run %s", row["id"])
         while True:
-            heartbeat(lock)
             with db.connect() as conn:
                 current = conn.execute("SELECT * FROM runs WHERE id=%s", (row["id"],)).fetchone()
             if stopping:
@@ -62,6 +65,7 @@ def execute(backend, row, token, lock):
                 break
             time.sleep(0.5)
     except CleanupError:
+        cleanup_uncertain = True
         raise
     except Exception as exc:
         # Do not log Docker environment payloads or credentials.
@@ -75,6 +79,8 @@ def execute(backend, row, token, lock):
         # Revoke credentials and uploads even if infrastructure cleanup must be retried on restart.
         with db.connect() as conn:
             conn.execute("UPDATE runs SET token_hash=NULL,spec=spec-'files' WHERE id=%s", (row["id"],))
+        if cleanup_uncertain:
+            raise CleanupError("Sandbox cleanup requires restart and reconciliation.")
         if handle:
             # Do not claim completion if teardown cannot be confirmed.
             backend.cleanup(handle)
@@ -113,24 +119,64 @@ def main():
                 db.finish(
                     conn, row["id"], "failed", "Worker restarted during execution. Run was not retried."
                 )
-        logging.info("%s worker ready", backend.name)
-        while not stopping:
-            heartbeat(lock)
-            token = secrets.token_urlsafe(32)
-            with db.connect() as conn:
-                row = conn.execute(
-                    "SELECT * FROM runs WHERE status='queued' ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1"
-                ).fetchone()
-                if row:
-                    conn.execute(
-                        "UPDATE runs SET status='running',started_at=now(),token_hash=%s WHERE id=%s",
-                        (hashlib.sha256(token.encode()).hexdigest(), row["id"]),
-                    )
-                    db.event(conn, row["id"], "run.started", {"backend": backend.name, "memory_mb": 256})
-            if row:
-                execute(backend, row, token, lock)
-            else:
+        logging.info("%s worker ready; concurrency limit %s", backend.name, MAX_CONCURRENT_RUNS)
+        run_queue(backend.name, lock, MAX_CONCURRENT_RUNS)
+
+
+def run_queue(backend_name, lock, limit):
+    # Only the coordinator uses the advisory-lock connection. Each execution
+    # owns its backend client and DB connections; no HTTP sessions are shared.
+    with ThreadPoolExecutor(max_workers=limit) as pool:
+        active = set()
+        try:
+            while not stopping:
+                heartbeat(lock)
+                active = reap(active)
+                while len(active) < limit and not stopping:
+                    token = secrets.token_urlsafe(32)
+                    row = claim(backend_name, token)
+                    if row is None:
+                        break
+                    active.add(pool.submit(execute_new, row, token))
                 time.sleep(0.5)
+        finally:
+            # Stop every active sandbox before releasing the ownership lock.
+            # Cleanup failures stop admission and are reconciled on restart.
+            stop()
+            for future in active:
+                future.result()
+
+
+def reap(active):
+    remaining = set()
+    for future in active:
+        if future.done():
+            future.result()  # A teardown/DB failure must stop admission, not free a slot.
+        else:
+            remaining.add(future)
+    return remaining
+
+
+def execute_new(row, token):
+    backend = create_backend()
+    try:
+        execute(backend, row, token)
+    finally:
+        backend.close()
+
+
+def claim(backend_name, token):
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM runs WHERE status='queued' ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1"
+        ).fetchone()
+        if row:
+            conn.execute(
+                "UPDATE runs SET status='running',started_at=now(),token_hash=%s WHERE id=%s",
+                (hashlib.sha256(token.encode()).hexdigest(), row["id"]),
+            )
+            db.event(conn, row["id"], "run.started", {"backend": backend_name, "memory_mb": 256})
+        return row
 
 
 if __name__ == "__main__":
